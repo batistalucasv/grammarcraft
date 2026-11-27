@@ -1,9 +1,8 @@
 //! `grammarcraft-cli`: the engine's commands from a terminal.
 //!
-//! The CLI is deliberately thin. It owns argument parsing, session lifetime
-//! and exit codes; everything a user can *do* is a command id that already
-//! exists in `grammarcraft-engine`. A second front end (a window, an agent socket)
-//! uses the same ids, so behaviour cannot drift between them.
+//! The CLI is deliberately thin. It owns argument parsing, session lifetime,
+//! MCP stdio dispatch and exit codes; everything a user can *do* is a command
+//! id registered in `grammarcraft-engine`.
 #![deny(
     clippy::unwrap_used,
     clippy::expect_used,
@@ -12,6 +11,8 @@
     clippy::todo,
     clippy::unreachable
 )]
+
+mod mcp;
 
 use std::process::ExitCode;
 
@@ -22,14 +23,16 @@ const USAGE: &str = "\
 grammarcraft-cli — grammarcraft from the command line
 
 USAGE:
-  grammarcraft-cli commands             list every command as JSON
-  grammarcraft-cli run <id> [json]      run a command with its parameters (default {})
-  grammarcraft-cli stats                measure text stats in a fresh session
-  grammarcraft-cli -h | --help          this text
+  grammarcraft-cli commands                                                list every command as JSON
+  grammarcraft-cli run <id> [json]                                         run a command with its parameters (default {})
+  grammarcraft-cli check <file>                                            open and analyze a text/markdown/.grammarcraft.json file
+  grammarcraft-cli stats                                                   measure text stats in a fresh session
+  grammarcraft-cli mcp --automation-read-root <dir> --automation-write-root <dir>
+  grammarcraft-cli -h | --help                                             this text
 
 EXIT CODES:
   0  success
-  1  the command failed (unknown id, bad parameters, disabled)
+  1  the command failed (unknown id, bad parameters, disabled, I/O error)
   2  the command line itself was wrong
 ";
 
@@ -58,12 +61,33 @@ fn dispatch(args: Vec<String>) -> Result<ExitCode, String> {
             args.get(1).map(String::as_str),
             args.get(2).map(String::as_str),
         ),
+        "check" => check_file(args.get(1).map(String::as_str)),
         "stats" => run_command(Some("stats.measure"), None),
+        "mcp" => mcp::run(&args[1..]),
         "-h" | "--help" | "help" => {
             print!("{USAGE}");
             Ok(ExitCode::SUCCESS)
         }
         other => Err(format!("unknown subcommand `{other}`\n\n{USAGE}")),
+    }
+}
+
+fn check_file(path: Option<&str>) -> Result<ExitCode, String> {
+    let path = path.ok_or_else(|| format!("`check` needs a file path\n\n{USAGE}"))?;
+    let mut session = Session::new();
+    if let Err(error) = session.run("doc.open", &json!({ "path": path })) {
+        eprintln!("error: {error}");
+        return Ok(ExitCode::FAILURE);
+    }
+    match session.run("review.check", &json!({})) {
+        Ok(report) => {
+            println!("{}", pretty(&report)?);
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => {
+            eprintln!("error: {error}");
+            Ok(ExitCode::FAILURE)
+        }
     }
 }
 
@@ -75,8 +99,6 @@ fn run_command(id: Option<&str>, raw_params: Option<&str>) -> Result<ExitCode, S
         None => json!({}),
     };
     let mut session = Session::new();
-    // A command that only reads still goes through `run`, so the CLI has one
-    // path and the registry stays the source of truth.
     match session.run(id, &params) {
         Ok(value) => {
             println!("{}", pretty(&value)?);

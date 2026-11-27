@@ -3,8 +3,9 @@ name = "grammarcraft-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version.workspace = true
 publish = false
-description = "grammarcraft from the command line: list commands and run them with JSON parameters"
+description = "grammarcraft from the command line: list commands, run them, check files and serve MCP"
 
 [[bin]]
 name = "grammarcraft-cli"

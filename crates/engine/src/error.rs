@@ -6,7 +6,7 @@ use thiserror::Error;
 ///
 /// Four variants are enough for a front end to react differently: retry or fix
 /// the call (`Params`), tell the user the action is unavailable (`Disabled`),
-/// or report an internal failure (`Failed`).
+/// or report an internal/I/O failure (`Failed`).
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum CmdError {
     #[error("unknown command `{0}`")]
@@ -22,13 +22,20 @@ pub enum CmdError {
 impl From<CoreError> for CmdError {
     fn from(error: CoreError) -> Self {
         match error {
-            // Domain invariant rejections triggered by caller arguments map to
-            // `Params` so callers know to adjust the request.
             CoreError::EmptyText
             | CoreError::TextTooLong { .. }
             | CoreError::InvalidSpan { .. }
             | CoreError::NonCharBoundary { .. }
-            | CoreError::InvalidGoal { .. } => CmdError::Params(error.to_string()),
+            | CoreError::InvalidGoal { .. }
+            | CoreError::EmptyTerm
+            | CoreError::TermTooLong { .. }
+            | CoreError::InvalidTerm(_)
+            | CoreError::UnknownIssue(_) => CmdError::Params(error.to_string()),
+            CoreError::TooManyIssues { .. }
+            | CoreError::TooManySuggestions { .. }
+            | CoreError::TooManyCustomWords { .. }
+            | CoreError::TooManyIgnoredIssues { .. }
+            | CoreError::IdsExhausted => CmdError::Failed(error.to_string()),
         }
     }
 }

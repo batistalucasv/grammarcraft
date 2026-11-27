@@ -3,12 +3,16 @@ name = "grammarcraft-engine"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Session, command registry and the contract every user-visible action goes through"
+rust-version.workspace = true
+description = "Session, command registry, undo/redo, atomic persistence and automation root confinement"
 
 [lints]
 workspace = true
 
 [dependencies]
 grammarcraft-core = { workspace = true }
-thiserror = { workspace = true }
+grammarcraft-rules = { workspace = true }
+craft-atomic = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
+thiserror = { workspace = true }
