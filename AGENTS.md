@@ -71,11 +71,11 @@ GrammarCraft is a clean-room, pure-Rust writing assistant and grammar checker in
 
 Workspace crates follow strict downward dependencies enforced by `cargo xtask layers` (`xtask/src/layers.rs` `TABLE`):
 
-- **L0 (`crates/core`, `grammarcraft-core`):** pure domain types (`Document`, `TextSpan`, `WritingGoals`, `Issue`, `ReadabilityMetrics`, `WritingScore`, `ToneProfile`, `PersonalDictionary`, `IgnoredIssueSet`, `CoreError`, `MAX_*` bounds). No I/O, no `serde_json`, no UI, `unsafe_code = "forbid"`, zero panics.
-- **L1 (`crates/rules`, `grammarcraft-rules`):** deterministic incremental proofing/clarity/style/readability/tone pipeline over `grammarcraft-core` and `craft-proof`. No UI, no network I/O.
-- **L2 (`crates/engine`, `grammarcraft-engine`):** `Session`, `CommandSpec` registry, bounded undo/redo, atomic `.grammarcraft.json`/`.txt`/`.md` persistence (`craft-atomic`), and `AutomationRoots` path confinement (`file_access`).
+- **L0 (`crates/core`, `grammarcraft-core`):** pure domain types (`Document`, `TextSpan`, `WritingGoals`, `Issue`, `ReadabilityMetrics`, `WritingScore`, `ToneProfile`, `PersonalDictionary` with UTF-8/UTF-16LE `CUSTOM.DIC`, `IgnoredIssueSet`, `StyleGuide`, `SnippetCatalog`, `CoreError`, `MAX_*` bounds). No I/O, no `serde_json`, no UI, `unsafe_code = "forbid"`, zero panics.
+- **L1 (`crates/rules`, `grammarcraft-rules`):** deterministic incremental proofing, contextual paronyms/homophones (EN/PT-BR), regional variant consistency, clarity/style/readability/tone, and linear-time `StyleGuide` evaluation over `grammarcraft-core`, `craft-proof`, and `regex`. No UI, no network I/O.
+- **L2 (`crates/engine`, `grammarcraft-engine`):** `Session`, 23-command `CommandSpec` registry (`doc.*`, `history.*`, `goals.set`, `stats.measure`, `review.*`, `dict.*`, `style.*`, `snippet.*`), bounded undo/redo, atomic `.grammarcraft.json`/`.txt`/`.md`/`CUSTOM.DIC` persistence (`craft-atomic`), and `AutomationRoots` path confinement (`file_access`).
 - **Apps (`apps/grammarcraft-cli`, `cli`):** thin CLI (`commands`, `run`, `check`, `stats`) and stdio MCP server (`mcp --automation-read-root <dir> --automation-write-root <dir>`).
-- **Tooling (`xtask`):** `ci`, `layers`, `assets`.
+- **Tooling (`xtask`, `deny.toml`):** `ci`, `layers`, `assets`, and `licences.md` SPDX allowlist policy in `deny.toml`.
 
 ## Start every session here
 

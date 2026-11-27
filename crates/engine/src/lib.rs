@@ -25,7 +25,8 @@ pub use grammarcraft_rules::AnalysisReport;
 use std::collections::VecDeque;
 
 use grammarcraft_core::{
-    Document, IgnoredIssueSet, MAX_UNDO_STEPS, PersonalDictionary, WritingGoals,
+    Document, IgnoredIssueSet, MAX_UNDO_STEPS, PersonalDictionary, SnippetCatalog, StyleGuide,
+    WritingGoals,
 };
 use grammarcraft_rules::AnalysisEngine;
 use serde_json::Value;
@@ -37,9 +38,12 @@ struct HistorySnapshot {
     language_tag: String,
     personal_dict: PersonalDictionary,
     ignored: IgnoredIssueSet,
+    style_guide: StyleGuide,
+    snippets: SnippetCatalog,
 }
 
-/// One editing session: the document, goals, dictionary, history and analysis cache.
+/// One editing session: the document, goals, dictionary, style guide, snippets,
+/// bounded history and analysis cache.
 #[derive(Debug)]
 pub struct Session {
     doc: Document,
@@ -47,6 +51,8 @@ pub struct Session {
     language_tag: String,
     personal_dict: PersonalDictionary,
     ignored: IgnoredIssueSet,
+    style_guide: StyleGuide,
+    snippets: SnippetCatalog,
     engine: AnalysisEngine,
     undo_stack: VecDeque<HistorySnapshot>,
     redo_stack: VecDeque<HistorySnapshot>,
@@ -61,6 +67,8 @@ impl Default for Session {
             language_tag: "en-US".to_owned(),
             personal_dict: PersonalDictionary::new(),
             ignored: IgnoredIssueSet::new(),
+            style_guide: StyleGuide::new(),
+            snippets: SnippetCatalog::new(),
             engine: AnalysisEngine::new(),
             undo_stack: VecDeque::new(),
             redo_stack: VecDeque::new(),
@@ -92,6 +100,14 @@ impl Session {
 
     pub fn ignored(&self) -> &IgnoredIssueSet {
         &self.ignored
+    }
+
+    pub fn style_guide(&self) -> &StyleGuide {
+        &self.style_guide
+    }
+
+    pub fn snippets(&self) -> &SnippetCatalog {
+        &self.snippets
     }
 
     pub fn can_undo(&self) -> bool {
@@ -132,6 +148,8 @@ impl Session {
             language_tag: self.language_tag.clone(),
             personal_dict: self.personal_dict.clone(),
             ignored: self.ignored.clone(),
+            style_guide: self.style_guide.clone(),
+            snippets: self.snippets.clone(),
         }
     }
 
@@ -141,6 +159,8 @@ impl Session {
         self.language_tag = snap.language_tag;
         self.personal_dict = snap.personal_dict;
         self.ignored = snap.ignored;
+        self.style_guide = snap.style_guide;
+        self.snippets = snap.snippets;
         self.last_report = None;
     }
 
@@ -203,6 +223,7 @@ impl Session {
                 self.goals,
                 &self.personal_dict,
                 &self.ignored,
+                &self.style_guide,
             )?;
             self.last_report = Some(report);
         }
