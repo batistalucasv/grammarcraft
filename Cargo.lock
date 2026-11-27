@@ -1120,6 +1120,7 @@ dependencies = [
  "craft-host",
  "craft-i18n",
  "craft-imaging",
+ "craft-keymap",
  "craft-pages",
  "craft-print",
  "craft-quit",
@@ -3482,6 +3483,7 @@ version = "0.1.0"
 dependencies = [
  "craft-ai-client",
  "craft-ai-core",
+ "craft-ai-native",
  "craft-ai-openai",
  "craft-atomic",
  "craft-docx",

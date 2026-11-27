@@ -650,3 +650,76 @@ fn legacy_goals_json_without_inclusive_language_deserializes_cleanly() {
     .expect("backward compatible goals json");
     assert!(!parsed.inclusive_language);
 }
+
+#[test]
+fn ai_native_consent_history_and_memory_secrets_persist_in_isolated_dir() {
+    use craft_ai_native::secrets::{MemoryStore, SecretStore};
+    use grammarcraft_core::{AiConsentStatus, AiLocalityMode};
+    use std::sync::Arc;
+
+    let base = std::env::temp_dir().join(format!("gc-engine-native-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("temp dir");
+    let consent_path = base.join("consent.json");
+    let history_path = base.join("jobs.jsonl");
+    let store: Arc<dyn SecretStore> = Arc::new(MemoryStore::default());
+
+    let mut session = Session::new();
+    session.configure_ai_storage(
+        Some(consent_path.clone()),
+        Some(history_path.clone()),
+        Arc::clone(&store),
+    );
+    session
+        .store_ai_secret("openai-default", "sk-test-123")
+        .expect("store in memory store");
+    assert!(session.has_ai_secret("openai-default").expect("read back"));
+
+    run(
+        &mut session,
+        "doc.set_text",
+        json!({"text": "This change is due to the fact that we tested persistence."}),
+    )
+    .expect("set text");
+    run(
+        &mut session,
+        "ai.consent",
+        json!({"granted": true, "locality": "cloud"}),
+    )
+    .expect("persist granted consent");
+    run(
+        &mut session,
+        "ai.consent",
+        json!({"granted": true, "locality": "local"}),
+    )
+    .expect("switch to local for offline run");
+    run(&mut session, "ai.rewrite", json!({})).expect("rewrite logs history");
+
+    // Reopen consent + history from disk into a fresh Session without re-granting: consent remains granted.
+    let mut reopened = Session::new();
+    reopened.configure_ai_storage(
+        Some(consent_path.clone()),
+        Some(history_path.clone()),
+        store,
+    );
+    reopened.set_ai_locality_mode(AiLocalityMode::CloudConsentRequired);
+    assert!(matches!(
+        reopened.ai_consent_status(),
+        Ok(AiConsentStatus::Granted { .. })
+    ));
+    let entries = reopened.ai_history_entries().expect("read history");
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].start.role_id, "rewrite");
+
+    // Corrupt consent file fails closed (empty ledger -> RequiredPending).
+    std::fs::write(&consent_path, b"{corrupt json").expect("corrupt file");
+    let mut damaged = Session::new();
+    damaged.configure_ai_storage(Some(consent_path), None, Arc::new(MemoryStore::default()));
+    damaged.set_ai_locality_mode(AiLocalityMode::CloudConsentRequired);
+    assert!(matches!(
+        damaged.ai_consent_status(),
+        Ok(AiConsentStatus::RequiredPending { .. })
+    ));
+
+    let _ = std::fs::remove_dir_all(&base);
+}

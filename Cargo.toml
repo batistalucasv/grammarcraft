@@ -25,6 +25,7 @@ craft = { git = "https://github.com/storytold/craft-libs", rev = "8be80b006888ae
 craft-ai-core = { git = "https://github.com/storytold/craft-ai-integrations", rev = "a822ad5b4db2c0dcd7a43bb62d6d75251fd3f8b5" }
 craft-ai-openai = { git = "https://github.com/storytold/craft-ai-integrations", rev = "a822ad5b4db2c0dcd7a43bb62d6d75251fd3f8b5" }
 craft-ai-client = { git = "https://github.com/storytold/craft-ai-integrations", rev = "a822ad5b4db2c0dcd7a43bb62d6d75251fd3f8b5" }
+craft-ai-native = { git = "https://github.com/storytold/craft-ai-integrations", rev = "a822ad5b4db2c0dcd7a43bb62d6d75251fd3f8b5" }
 
 egui = { version = "0.37", default-features = false }
 eframe = { version = "0.37", default-features = false }
