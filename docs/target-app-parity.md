@@ -1,14 +1,14 @@
 # GrammarCraft parity with commercial writing assistants
 
-> **Last reviewed:** 2026-11-27 · **Last updated:** 2026-11-27 · **Change:** repository instantiated from `craft-template` (`42f4fb7`, M0 baseline); 0% feature implementation. · **Target:** Commercial desktop/web writing assistants (black-box public feature surface)
+> **Last reviewed:** 2026-11-27 · **Last updated:** 2026-11-27 · **Change:** initial M0/M1 core domain (`Document`, `TextSpan`, `WritingGoals`, `TextStats`, `CoreError`) and 5 engine commands (`doc.set_text`, `doc.get`, `doc.clear`, `goals.set`, `stats.measure`) replaced placeholder `note.*` commands; weighted proofing/UI areas remain at 0% baseline. · **Target:** Commercial desktop/web writing assistants (black-box public feature surface)
 
 Authoritative readiness tracker for GrammarCraft. [`roadmap.md`](roadmap.md) tracks milestone gates; [`gaps.md`](gaps.md) sequences dependency-ordered work. Following `standards/clean-room.md` (`storytold/craft-contrib`), parity targets **visible user-facing capabilities** only—never proprietary numerical scores, internal rules, copy, or assets.
 
-## Headline (2026-11-27, M0 repository instantiation)
+## Headline (2026-11-27, initial M0/M1 domain & CLI commands)
 
 | Number | Value | Kind |
 | --- | --- | --- |
-| Domain & proofing command catalog coverage | **0 / 47 planned (0.0%)** | baseline (template currently ships placeholder `note.*` commands until M1) |
+| Domain & proofing command catalog coverage | **5 / 47 planned (10.6%)** | measured from `crates/engine/src/cmd.rs` (`doc.set_text`, `doc.get`, `doc.clear`, `goals.set`, `stats.measure`) |
 | Feature breadth (weighted across writing areas, languages, AI modes, surfaces) | **0%** | baseline |
 | Feature depth (weighted by typical writer usage, table below) | **0%** | baseline |
 | **Ready for daily writing & review** (full target) | **0%** | baseline (weighted sum over [By dimension](#by-dimension)) |
@@ -16,7 +16,7 @@ Authoritative readiness tracker for GrammarCraft. [`roadmap.md`](roadmap.md) tra
 | **Essentials proofreader** | **0%** | baseline |
 | Existing shared foundation in the ArtCraft ecosystem | `craft-proof` (11 grammar locales + SCOWL/Hunspell/packs), `craft-text`, `craft-ai-integrations` (`text.complete` + `SecretStore`/`ConsentFile`), `craft-ui-*` + `craft-mcp-server` | verified in sibling ArtCraft repositories |
 
-**Stage: M0 (repository instantiated).** `cargo xtask ci` passes on the template scaffold; domain implementation begins in M1.
+**Stage: M0/M1 foundation.** `cargo xtask ci` passes with `Document`, UTF-8 `TextSpan`, `WritingGoals`, `TextStats`, `CoreError`, and the 5 initial `doc.*` / `goals.set` / `stats.measure` commands; proofing rules, persistence, undo/redo, MCP confinement, and UI remain pending in M1–M3.
 
 ## What we measured against
 
