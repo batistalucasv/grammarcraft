@@ -151,13 +151,15 @@ impl Purpose {
     }
 }
 
-/// Four-axis writing goal configuration for a document session.
+/// Four-axis writing goal and rule configuration for a document session.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct WritingGoals {
     pub audience: Audience,
     pub formality: Formality,
     pub context: Context,
     pub purpose: Purpose,
+    #[serde(default)]
+    pub inclusive_language: bool,
 }
 
 fn normalize_goal_token(field: &'static str, raw: &str) -> CoreResult<String> {

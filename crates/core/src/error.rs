@@ -53,6 +53,18 @@ pub enum CoreError {
     InvalidSnippet(String),
     #[error("unknown snippet `{0}`")]
     UnknownSnippet(String),
+    #[error("too many similarity matches (limit {max})")]
+    TooManySimilarityMatches { max: usize },
+    #[error("citation catalog holds at most {max} entries")]
+    TooManyCitations { max: usize },
+    #[error("invalid citation: {0}")]
+    InvalidCitation(String),
+    #[error("invalid BibTeX input: {0}")]
+    InvalidBibtex(String),
+    #[error("AI input text exceeds {max} bytes")]
+    AiTextTooLong { max: usize },
+    #[error("too many diff hunks (limit {max})")]
+    TooManyDiffHunks { max: usize },
     #[error("there is no issue with id {0}")]
     UnknownIssue(IssueId),
     #[error("issue ids are exhausted")]

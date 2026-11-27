@@ -485,3 +485,84 @@ fn tone_profile_anchors_evidence_spans() {
         assert!(span.slice(doc.text()).is_ok());
     }
 }
+
+#[test]
+fn formality_and_inclusive_language_respect_goals_and_avoid_false_positives() {
+    use grammarcraft_core::Formality;
+
+    let mut doc = Document::new();
+    doc.set_text("We don't allow the chairman to rely on humanity or a manual blacklist.")
+        .expect("valid");
+    let mut engine = AnalysisEngine::new();
+
+    let default_report = engine
+        .analyze(
+            &doc,
+            Some("en-US"),
+            WritingGoals::default(),
+            &PersonalDictionary::new(),
+            &IgnoredIssueSet::new(),
+            &StyleGuide::new(),
+        )
+        .expect("valid");
+    assert!(
+        !default_report
+            .issues
+            .iter()
+            .any(|i| i.rule_id == "clarity.formality" || i.rule_id == "style.inclusive"),
+        "expected neutral opt-out defaults to skip formal contractions and inclusive rules"
+    );
+
+    let formal_inclusive = WritingGoals {
+        formality: Formality::Formal,
+        inclusive_language: true,
+        ..WritingGoals::default()
+    };
+    let report = engine
+        .analyze(
+            &doc,
+            Some("en-US"),
+            formal_inclusive,
+            &PersonalDictionary::new(),
+            &IgnoredIssueSet::new(),
+            &StyleGuide::new(),
+        )
+        .expect("valid");
+    assert!(
+        report
+            .issues
+            .iter()
+            .any(|i| i.rule_id == "clarity.formality"
+                && i.replacements.first().map(|r| r.text.as_str()) == Some("do not"))
+    );
+    let inclusive_hits: Vec<_> = report
+        .issues
+        .iter()
+        .filter(|i| i.rule_id == "style.inclusive")
+        .collect();
+    assert_eq!(inclusive_hits.len(), 2, "got {inclusive_hits:?}");
+}
+
+#[test]
+fn local_similarity_detects_overlapping_passages_deterministically() {
+    use crate::{LocalCorpusDoc, check_local_similarity};
+
+    let doc_text = "Clean-room verification prevents license contamination across open source crates. Completely original closing remark.";
+    let corpus = [
+        LocalCorpusDoc {
+            source_name: "policy.md".to_owned(),
+            text: "Clean-room verification prevents license contamination across open source crates in practice.".to_owned(),
+        },
+        LocalCorpusDoc {
+            source_name: "unrelated.txt".to_owned(),
+            text: "Astronomers measured distant galaxies using infrared spectroscopy.".to_owned(),
+        },
+    ];
+    let report = check_local_similarity(doc_text, &corpus).expect("similarity check succeeds");
+    assert_eq!(report.sources_scanned, 2);
+    assert!(report.overall_percent > 0);
+    assert_eq!(report.matches.len(), 1);
+    assert_eq!(report.matches[0].source_name, "policy.md");
+    assert!(report.matches[0].jaccard_percent >= 50);
+    assert!(report.matches[0].span.slice(doc_text).is_ok());
+}
