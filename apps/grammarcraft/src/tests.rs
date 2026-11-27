@@ -278,8 +278,8 @@ fn control_server_rejects_bad_token_and_dispatches_session_commands() {
             craft::ui::shell::embed::install(ctx, headless_install_spec(), &ui_fonts())
                 .expect("craft runtime installs on test context");
         })
-        .build_eframe(|cc| {
-            let host = WindowHost::of(&cc.egui_ctx);
+        .build_eframe(|_cc| {
+            let host = WindowHost::of(&egui::Context::default());
             let (rx, server) = ControlServer::start(&control_opts, 0, host)
                 .expect("loopback control server binds port 0");
             bound_addr = Some(server.addr);
