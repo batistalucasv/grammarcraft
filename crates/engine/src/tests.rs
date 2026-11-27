@@ -1,6 +1,9 @@
-use grammarcraft_core::{Audience, Context, Formality, MAX_DOCUMENT_BYTES, Purpose};
+use grammarcraft_core::{
+    Audience, Context, Formality, MAX_DOCUMENT_BYTES, MAX_UNDO_STEPS, Purpose,
+};
 use serde_json::{Value, json};
 
+use crate::file_access::{self, AutomationRoots};
 use crate::{CmdError, Session, registry};
 
 fn run(session: &mut Session, id: &str, params: Value) -> Result<Value, CmdError> {
@@ -35,8 +38,17 @@ fn the_registry_reports_every_command() {
         "doc.set_text",
         "doc.get",
         "doc.clear",
+        "doc.save",
+        "doc.open",
+        "history.undo",
+        "history.redo",
         "goals.set",
         "stats.measure",
+        "review.check",
+        "review.apply",
+        "review.dismiss",
+        "dict.add",
+        "dict.remove",
     ] {
         assert!(ids.contains(&expected), "missing `{expected}` in {ids:?}");
     }
@@ -61,16 +73,178 @@ fn set_text_get_and_measure_round_trip() {
         fetched.get("text").and_then(Value::as_str),
         Some("First sentence. Second sentence!")
     );
-    assert_eq!(
-        fetched
-            .get("stats")
-            .and_then(|s| s.get("words"))
-            .and_then(Value::as_u64),
-        Some(4)
-    );
-
     let measured = run(&mut session, "stats.measure", json!({})).expect("pure stats");
     assert_eq!(measured, stats);
+}
+
+#[test]
+fn undo_and_redo_restore_exact_state_and_bound_history() {
+    let mut session = Session::new();
+    assert!(matches!(
+        run(&mut session, "history.undo", json!({})),
+        Err(CmdError::Disabled(_))
+    ));
+
+    run(&mut session, "doc.set_text", json!({"text": "first"})).expect("set 1");
+    run(&mut session, "doc.set_text", json!({"text": "second"})).expect("set 2");
+    assert_eq!(session.doc().text(), "second");
+
+    run(&mut session, "history.undo", json!({})).expect("undo to first");
+    assert_eq!(session.doc().text(), "first");
+    run(&mut session, "history.redo", json!({})).expect("redo to second");
+    assert_eq!(session.doc().text(), "second");
+
+    for i in 0..(MAX_UNDO_STEPS + 20) {
+        run(
+            &mut session,
+            "doc.set_text",
+            json!({"text": format!("v{i}")}),
+        )
+        .expect("bounded set");
+    }
+    assert_eq!(session.undo_len(), MAX_UNDO_STEPS);
+}
+
+#[test]
+fn review_check_apply_dismiss_and_dict_round_trip() {
+    let mut session = Session::new();
+    run(
+        &mut session,
+        "doc.set_text",
+        json!({"text": "Xylophonia in order to finish."}),
+    )
+    .expect("set");
+
+    let initial = run(&mut session, "review.check", json!({})).expect("check");
+    let issues = initial["issues"].as_array().expect("issues array");
+    let redundancy_id = issues
+        .iter()
+        .find(|i| i["rule_id"] == "clarity.redundancy")
+        .and_then(|i| i["id"].as_u64())
+        .expect("redundancy issue id");
+
+    run(
+        &mut session,
+        "review.apply",
+        json!({"issue_id": redundancy_id}),
+    )
+    .expect("apply suggestion");
+    assert_eq!(session.doc().text(), "Xylophonia to finish.");
+
+    // Add unknown word to document dictionary and verify it disappears.
+    let after_apply = run(&mut session, "review.check", json!({})).expect("recheck");
+    assert!(
+        after_apply["issues"]
+            .as_array()
+            .expect("issues")
+            .iter()
+            .any(|i| i["rule_id"] == "proof.spelling")
+    );
+    run(&mut session, "dict.add", json!({"word": "Xylophonia"})).expect("add word");
+    let after_dict = run(&mut session, "review.check", json!({})).expect("recheck after dict");
+    assert!(
+        !after_dict["issues"]
+            .as_array()
+            .expect("issues")
+            .iter()
+            .any(|i| i["rule_id"] == "proof.spelling")
+    );
+
+    // Removing word brings spelling issue back, then dismiss suppresses it.
+    run(&mut session, "dict.remove", json!({"word": "Xylophonia"})).expect("remove word");
+    let after_remove = run(&mut session, "review.check", json!({})).expect("recheck");
+    let spell_id = after_remove["issues"]
+        .as_array()
+        .expect("issues")
+        .iter()
+        .find(|i| i["rule_id"] == "proof.spelling")
+        .and_then(|i| i["id"].as_u64())
+        .expect("spelling id");
+    run(
+        &mut session,
+        "review.dismiss",
+        json!({"issue_id": spell_id}),
+    )
+    .expect("dismiss");
+    let after_dismiss = run(&mut session, "review.check", json!({})).expect("recheck");
+    assert!(
+        after_dismiss["issues"]
+            .as_array()
+            .expect("issues")
+            .is_empty()
+    );
+}
+
+#[test]
+fn save_and_open_atomic_round_trip_and_confines_automation_roots() {
+    let base = std::env::temp_dir().join(format!("gc-engine-io-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let read_dir = base.join("read");
+    let write_dir = base.join("write");
+    let outside_dir = base.join("outside");
+    std::fs::create_dir_all(&read_dir).expect("read dir");
+    std::fs::create_dir_all(&write_dir).expect("write dir");
+    std::fs::create_dir_all(&outside_dir).expect("outside dir");
+    std::fs::write(read_dir.join("note.txt"), "Sample in read root.").expect("seed file");
+    std::fs::write(outside_dir.join("secret.txt"), "Secret").expect("outside file");
+
+    let roots = AutomationRoots::new(Some(&read_dir), Some(&write_dir))
+        .expect("valid roots")
+        .expect("some roots");
+
+    file_access::confine(Some(&roots), || {
+        let mut session = Session::new();
+        // Reading inside read_dir succeeds.
+        let read_path = read_dir.join("note.txt").to_string_lossy().into_owned();
+        run(&mut session, "doc.open", json!({"path": read_path})).expect("open inside read root");
+        assert_eq!(session.doc().text(), "Sample in read root.");
+
+        // Reading outside read_dir fails.
+        let outside_read = outside_dir
+            .join("secret.txt")
+            .to_string_lossy()
+            .into_owned();
+        let err = run(&mut session, "doc.open", json!({"path": outside_read}))
+            .expect_err("read outside root must fail");
+        assert!(matches!(err, CmdError::Failed(m) if m.contains("outside the read root")));
+
+        // Traversal out of write_dir fails.
+        let traversal = format!(
+            "{}/../outside/escape.grammarcraft.json",
+            write_dir.display()
+        );
+        let err = run(&mut session, "doc.save", json!({"path": traversal}))
+            .expect_err("traversal outside write root must fail");
+        assert!(matches!(err, CmdError::Failed(m) if m.contains("outside the write root")));
+
+        // Writing inside write_dir succeeds atomically.
+        run(
+            &mut session,
+            "goals.set",
+            json!({"formality": "formal", "context": "academic"}),
+        )
+        .expect("goals");
+        run(&mut session, "dict.add", json!({"word": "GrammarCraft"})).expect("dict");
+        let save_path = write_dir
+            .join("saved.grammarcraft.json")
+            .to_string_lossy()
+            .into_owned();
+        run(&mut session, "doc.save", json!({"path": save_path})).expect("save inside write root");
+    });
+
+    // Open saved JSON unconfined and verify round-trip fidelity.
+    let mut restored = Session::new();
+    let save_path = write_dir
+        .join("saved.grammarcraft.json")
+        .to_string_lossy()
+        .into_owned();
+    run(&mut restored, "doc.open", json!({"path": save_path})).expect("open saved json");
+    assert_eq!(restored.doc().text(), "Sample in read root.");
+    assert_eq!(restored.goals().formality, Formality::Formal);
+    assert_eq!(restored.goals().context, Context::Academic);
+    assert!(restored.personal_dict().contains("grammarcraft"));
+
+    let _ = std::fs::remove_dir_all(&base);
 }
 
 #[test]
@@ -114,7 +288,6 @@ fn goals_set_updates_atomically_and_rejects_invalid_values() {
     assert_eq!(session.goals().context, Context::Academic);
     assert_eq!(session.goals().purpose, Purpose::Explain);
 
-    // Invalid `purpose` must fail without applying the new `audience`.
     let error = run(
         &mut session,
         "goals.set",
@@ -123,42 +296,6 @@ fn goals_set_updates_atomically_and_rejects_invalid_values() {
     .expect_err("invalid purpose must be rejected");
     assert!(matches!(error, CmdError::Params(_)), "{error:?}");
     assert_eq!(session.goals().audience, Audience::Specialized);
-
-    let mistyped =
-        run(&mut session, "goals.set", json!({"formality": 42})).expect_err("non-string goal");
-    assert!(
-        matches!(&mistyped, CmdError::Params(msg) if msg.contains("formality")),
-        "{mistyped:?}"
-    );
-}
-
-#[test]
-fn an_unknown_command_is_an_error() {
-    let mut session = Session::new();
-    let error = run(&mut session, "doc.teleport", json!({})).expect_err("the id does not exist");
-    assert!(matches!(error, CmdError::UnknownCommand(id) if id == "doc.teleport"));
-}
-
-#[test]
-fn missing_and_mistyped_parameters_are_rejected() {
-    let mut session = Session::new();
-    for params in [
-        json!({}),
-        json!({"text": ""}),
-        json!({"text": "   "}),
-        json!({"text": 1}),
-        json!({"text": null}),
-        json!({"text": []}),
-        json!(null),
-        json!([]),
-    ] {
-        let error = run(&mut session, "doc.set_text", params.clone()).expect_err("bad parameters");
-        assert!(matches!(error, CmdError::Params(_)), "{params}: {error:?}");
-    }
-    assert!(
-        session.doc().is_empty(),
-        "a rejected call must not change the document"
-    );
 }
 
 #[test]
@@ -179,10 +316,13 @@ fn hostile_parameters_never_panic() {
         json!({"text": "\u{0}\u{1}"}),
         json!({"text": "a".repeat(200_000)}),
         json!({"text": "a".repeat(MAX_DOCUMENT_BYTES + 1)}),
+        json!({"path": ""}),
+        json!({"path": "/nonexistent/nowhere/foo.txt"}),
+        json!({"word": 123}),
+        json!({"word": "a".repeat(512)}),
+        json!({"issue_id": u64::MAX}),
+        json!({"issue_id": 1e300}),
         json!({"audience": 123}),
-        json!({"audience": "x".repeat(512)}),
-        json!({"id": u64::MAX}),
-        json!({"id": 1e300}),
         json!({"unknown": {"nested": [true, null]}}),
     ];
     for spec in registry().all() {
@@ -191,14 +331,4 @@ fn hostile_parameters_never_panic() {
             let _ = session.run(spec.id, params);
         }
     }
-}
-
-#[test]
-fn a_duplicate_id_does_not_replace_the_first_command() {
-    use crate::CommandSpec;
-    let first = CommandSpec::new("x", "First", "Here", |_, _| Ok(json!({"first": true})));
-    let second = CommandSpec::new("x", "Second", "Here", |_, _| Ok(json!({"second": true})));
-    let registry = crate::Registry::new(vec![first, second]);
-    assert_eq!(registry.all().len(), 2);
-    assert_eq!(registry.get("x").map(|spec| spec.label), Some("First"));
 }

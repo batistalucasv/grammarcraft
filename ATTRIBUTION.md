@@ -12,4 +12,14 @@ generator.
 
 | Asset | Author | Source | Licence | Notes |
 |---|---|---|---|---|
-| _(none yet)_ | | | | The template ships no asset files. |
+| _(none yet in repository tree)_ | | | | This repository ships no standalone asset files yet. |
+
+## Assets bundled through dependencies
+
+`craft-proof` (`storytold/craft-libs` at `8be80b006888ae023d61eed265241c9b78b84981`) embeds:
+
+| Dependency asset | Author | Source | Licence |
+|---|---|---|---|
+| `crates/proof/data/en-words.dic` | Grady Ward (Moby Hyphenator II); break points dropped by `craft-proof` contributors | [Project Gutenberg eBook #3204](https://www.gutenberg.org/ebooks/3204), via `storytold/craft-i18n` `language-data/en-us/en-us.dic` | Public domain |
+| `crates/proof/data/en-extra.txt` | WordCraft contributors | `storytold/craft-i18n` `language-data/en-us/en-extra.txt` | MIT OR Apache-2.0 |
+| Optional build-time `CRAFT_I18N_DIR` language data | Upstream `craft-i18n` / SCOWL / TeX hyphenation authors | `storytold/craft-i18n` (`language-data/`) | Recorded in `NOTICE` and `storytold/craft-libs` (`ATTRIBUTION.md`) |

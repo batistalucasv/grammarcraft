@@ -19,12 +19,27 @@
 
 mod doc;
 mod error;
+mod glossary;
 mod goals;
+mod issue;
+mod metrics;
 mod stats;
 
-pub use doc::{Document, MAX_DOCUMENT_BYTES, TextSpan};
-pub use error::{CoreError, CoreResult};
+pub use doc::{Document, MAX_DOCUMENT_BYTES, MAX_UNDO_STEPS, TextSpan};
+pub use error::{BoundsSnapshot, CoreError, CoreResult};
+pub use glossary::{
+    IgnoredIssueKey, IgnoredIssueSet, MAX_CUSTOM_WORDS, MAX_IGNORED_ISSUES, MAX_TERM_BYTES,
+    PersonalDictionary,
+};
 pub use goals::{Audience, Context, Formality, MAX_GOAL_VALUE_BYTES, Purpose, WritingGoals};
+pub use issue::{
+    Confidence, Issue, IssueCategory, IssueId, IssueList, MAX_ISSUES, MAX_SUGGESTIONS_PER_ISSUE,
+    Replacement, Severity,
+};
+pub use metrics::{
+    CategoryScoreBreakdown, ReadabilityLevel, ReadabilityMetrics, ToneProfile, ToneSignal,
+    ToneSignalKind, WritingScore,
+};
 pub use stats::TextStats;
 
 #[cfg(test)]

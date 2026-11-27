@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::{CoreError, CoreResult, TextStats};
 
 /// Longest document text accepted, in bytes (1 MiB).
@@ -6,11 +8,14 @@ use crate::{CoreError, CoreResult, TextStats};
 /// rejected in constant time.
 pub const MAX_DOCUMENT_BYTES: usize = 1024 * 1024;
 
+/// Maximum undo/redo history entries retained per editing session.
+pub const MAX_UNDO_STEPS: usize = 200;
+
 /// A validated byte range within a UTF-8 document.
 ///
 /// Constructing a span checks both bounds and UTF-8 character boundaries, so
 /// downstream slicing never panics by landing inside a multi-byte code point.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TextSpan {
     start: usize,
     end: usize,
@@ -64,7 +69,7 @@ impl TextSpan {
 }
 
 /// The active document text held in memory.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Document {
     text: String,
 }
@@ -88,6 +93,35 @@ impl Document {
             return Err(CoreError::EmptyText);
         }
         self.text = text.to_owned();
+        Ok(self.stats())
+    }
+
+    /// Replaces `span` with `replacement`, checking the resulting byte size
+    /// before allocating a new `String`.
+    pub fn replace_span(&mut self, span: TextSpan, replacement: &str) -> CoreResult<TextStats> {
+        let verified = TextSpan::new(&self.text, span.start(), span.end())?;
+        let new_len = self
+            .text
+            .len()
+            .saturating_sub(verified.len())
+            .checked_add(replacement.len())
+            .ok_or(CoreError::TextTooLong {
+                max: MAX_DOCUMENT_BYTES,
+            })?;
+        if new_len > MAX_DOCUMENT_BYTES {
+            return Err(CoreError::TextTooLong {
+                max: MAX_DOCUMENT_BYTES,
+            });
+        }
+        let mut updated = String::with_capacity(new_len);
+        if let Some(prefix) = self.text.get(..verified.start()) {
+            updated.push_str(prefix);
+        }
+        updated.push_str(replacement);
+        if let Some(suffix) = self.text.get(verified.end()..) {
+            updated.push_str(suffix);
+        }
+        self.text = updated;
         Ok(self.stats())
     }
 

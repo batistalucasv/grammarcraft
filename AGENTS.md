@@ -63,11 +63,19 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are used as in RFC 2119
 ## This repository
 <!-- craft-agents:end -->
 
-# grammarcraft — instructions for agents
+# GrammarCraft — instructions for agents
 
-`grammarcraft` is a placeholder name. Replace it before the first real commit (the `craft-template` guide
-has the exact steps in its chapter 10, "Instanciar"); the structure, the layer rule and the
-never-crash rules are what this template is for.
+GrammarCraft is a clean-room, pure-Rust writing assistant and grammar checker in the ArtCraft ecosystem.
+
+## Layers
+
+Workspace crates follow strict downward dependencies enforced by `cargo xtask layers` (`xtask/src/layers.rs` `TABLE`):
+
+- **L0 (`crates/core`, `grammarcraft-core`):** pure domain types (`Document`, `TextSpan`, `WritingGoals`, `Issue`, `ReadabilityMetrics`, `WritingScore`, `ToneProfile`, `PersonalDictionary`, `IgnoredIssueSet`, `CoreError`, `MAX_*` bounds). No I/O, no `serde_json`, no UI, `unsafe_code = "forbid"`, zero panics.
+- **L1 (`crates/rules`, `grammarcraft-rules`):** deterministic incremental proofing/clarity/style/readability/tone pipeline over `grammarcraft-core` and `craft-proof`. No UI, no network I/O.
+- **L2 (`crates/engine`, `grammarcraft-engine`):** `Session`, `CommandSpec` registry, bounded undo/redo, atomic `.grammarcraft.json`/`.txt`/`.md` persistence (`craft-atomic`), and `AutomationRoots` path confinement (`file_access`).
+- **Apps (`apps/grammarcraft-cli`, `cli`):** thin CLI (`commands`, `run`, `check`, `stats`) and stdio MCP server (`mcp --automation-read-root <dir> --automation-write-root <dir>`).
+- **Tooling (`xtask`):** `ci`, `layers`, `assets`.
 
 ## Start every session here
 

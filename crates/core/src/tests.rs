@@ -1,6 +1,9 @@
 use crate::{
-    Audience, Context, CoreError, Document, Formality, MAX_DOCUMENT_BYTES, MAX_GOAL_VALUE_BYTES,
-    Purpose, TextSpan, TextStats, WritingGoals,
+    Audience, Confidence, Context, CoreError, Document, Formality, IgnoredIssueKey,
+    IgnoredIssueSet, IssueCategory, IssueId, IssueList, MAX_CUSTOM_WORDS, MAX_DOCUMENT_BYTES,
+    MAX_GOAL_VALUE_BYTES, MAX_IGNORED_ISSUES, MAX_ISSUES, MAX_SUGGESTIONS_PER_ISSUE,
+    MAX_TERM_BYTES, PersonalDictionary, Purpose, Replacement, Severity, TextSpan, TextStats,
+    WritingGoals, WritingScore,
 };
 
 #[test]
@@ -50,7 +53,6 @@ fn max_document_bytes_is_accepted_and_max_plus_one_is_rejected() {
 fn multibyte_utf8_spans_enforce_char_boundaries() {
     let mut doc = Document::new();
     doc.set_text("Olá, café!").expect("valid UTF-8 text");
-    // 'á' starts at byte 2 and takes 2 bytes (bytes 2..4); 'é' is bytes 8..10.
     let valid = doc.span(0, 4).expect("valid char boundaries");
     assert_eq!(doc.slice(valid).expect("valid slice"), "Olá");
     assert_eq!(valid.len(), 4);
@@ -80,6 +82,25 @@ fn multibyte_utf8_spans_enforce_char_boundaries() {
             len: doc.len_bytes(),
         })
     );
+}
+
+#[test]
+fn replace_span_updates_text_and_rejects_oversized_replacement() {
+    let mut doc = Document::new();
+    doc.set_text("The cat slept.").expect("valid");
+    let span = doc.span(4, 7).expect("cat span");
+    doc.replace_span(span, "dog").expect("valid replacement");
+    assert_eq!(doc.text(), "The dog slept.");
+
+    let huge = "x".repeat(MAX_DOCUMENT_BYTES);
+    let tiny_span = doc.span(0, 3).expect("tiny span");
+    assert_eq!(
+        doc.replace_span(tiny_span, &huge),
+        Err(CoreError::TextTooLong {
+            max: MAX_DOCUMENT_BYTES
+        })
+    );
+    assert_eq!(doc.text(), "The dog slept.");
 }
 
 #[test]
@@ -132,4 +153,131 @@ fn clear_empties_document_and_returns_removed_bytes() {
     assert_eq!(doc.clear(), 5);
     assert!(doc.is_empty());
     assert_eq!(doc.clear(), 0);
+}
+
+#[test]
+fn issue_list_enforces_monotonic_ids_and_max_bounds() {
+    let text = "hello world";
+    let span = TextSpan::new(text, 0, 5).expect("valid span");
+    let mut list = IssueList::new();
+
+    let too_many_suggestions = (0..=MAX_SUGGESTIONS_PER_ISSUE)
+        .map(|i| Replacement::new(format!("r{i}")))
+        .collect();
+    assert_eq!(
+        list.push(
+            "test.rule",
+            IssueCategory::SpellingAndGrammar,
+            Severity::Error,
+            Confidence::High,
+            span,
+            "Title",
+            "Explanation",
+            too_many_suggestions,
+        ),
+        Err(CoreError::TooManySuggestions {
+            max: MAX_SUGGESTIONS_PER_ISSUE
+        })
+    );
+
+    let mut prev = IssueId::from_raw(0);
+    for _ in 0..MAX_ISSUES {
+        let id = list
+            .push(
+                "test.rule",
+                IssueCategory::ClarityAndConciseness,
+                Severity::Suggestion,
+                Confidence::Medium,
+                span,
+                "Title",
+                "Explanation",
+                vec![Replacement::new("hi")],
+            )
+            .expect("within MAX_ISSUES");
+        assert!(id > prev);
+        prev = id;
+    }
+    assert_eq!(
+        list.push(
+            "test.rule",
+            IssueCategory::ClarityAndConciseness,
+            Severity::Suggestion,
+            Confidence::Medium,
+            span,
+            "Title",
+            "Explanation",
+            vec![],
+        ),
+        Err(CoreError::TooManyIssues { max: MAX_ISSUES })
+    );
+}
+
+#[test]
+fn personal_dictionary_validates_terms_and_bounds() {
+    let mut dict = PersonalDictionary::new();
+    assert!(dict.add("  GrammarCraft ").expect("valid term"));
+    assert!(!dict.add("grammarcraft").expect("duplicate is no-op"));
+    assert!(dict.contains("GRAMMARCRAFT"));
+
+    assert_eq!(dict.add(""), Err(CoreError::EmptyTerm));
+    assert_eq!(
+        dict.add(&"a".repeat(MAX_TERM_BYTES + 1)),
+        Err(CoreError::TermTooLong {
+            max: MAX_TERM_BYTES
+        })
+    );
+    assert!(matches!(
+        dict.add("two words"),
+        Err(CoreError::InvalidTerm(_))
+    ));
+    assert!(dict.remove("grammarcraft").expect("valid removal"));
+    assert!(!dict.contains("grammarcraft"));
+
+    for i in 0..MAX_CUSTOM_WORDS {
+        dict.add(&format!("w{i}")).expect("within MAX_CUSTOM_WORDS");
+    }
+    assert_eq!(
+        dict.add("overflow"),
+        Err(CoreError::TooManyCustomWords {
+            max: MAX_CUSTOM_WORDS
+        })
+    );
+}
+
+#[test]
+fn ignored_issue_set_is_bounded() {
+    let mut set = IgnoredIssueSet::new();
+    for i in 0..MAX_IGNORED_ISSUES {
+        let key = IgnoredIssueKey::new("rule", i, "word").expect("valid key");
+        assert!(set.ignore(key).expect("within MAX_IGNORED_ISSUES"));
+    }
+    let extra = IgnoredIssueKey::new("rule", MAX_IGNORED_ISSUES, "word").expect("valid key");
+    assert_eq!(
+        set.ignore(extra),
+        Err(CoreError::TooManyIgnoredIssues {
+            max: MAX_IGNORED_ISSUES
+        })
+    );
+}
+
+#[test]
+fn writing_score_drops_with_open_issues_and_is_100_when_clean() {
+    assert_eq!(WritingScore::compute(&[], 100).score, 100);
+    let text = "One two three four five.";
+    let span = TextSpan::new(text, 0, 3).expect("valid");
+    let mut list = IssueList::new();
+    list.push(
+        "spell",
+        IssueCategory::SpellingAndGrammar,
+        Severity::Error,
+        Confidence::High,
+        span,
+        "Spelling",
+        "Check spelling",
+        vec![],
+    )
+    .expect("fits");
+    let score = WritingScore::compute(list.items(), 20);
+    assert_eq!(score.score, 80);
+    assert_eq!(score.breakdown.spelling_and_grammar, 1);
 }
