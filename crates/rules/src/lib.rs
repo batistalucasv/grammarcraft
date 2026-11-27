@@ -8,18 +8,24 @@
 )]
 
 mod clarity;
+mod contextual;
 mod proof_adapter;
 mod scoring;
+mod style_guide_eval;
 mod tone;
+mod variants;
 
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 use craft_proof::ProofLang;
 use grammarcraft_core::{
     Confidence, CoreResult, Document, IgnoredIssueKey, IgnoredIssueSet, Issue, IssueCategory,
-    IssueList, PersonalDictionary, ReadabilityMetrics, Replacement, Severity, TextSpan, TextStats,
-    ToneProfile, WritingGoals, WritingScore,
+    IssueList, PersonalDictionary, ReadabilityMetrics, Replacement, Severity, StyleGuide, TextSpan,
+    TextStats, ToneProfile, WritingGoals, WritingScore,
 };
+
+pub use style_guide_eval::validate_style_rule;
 
 /// Maximum paragraph cache entries held in memory by [`AnalysisEngine`].
 const MAX_CACHE_ENTRIES: usize = 4_096;
@@ -75,7 +81,7 @@ impl AnalysisEngine {
     }
 
     /// Runs the deterministic pipeline over `doc`, reusing cached per-paragraph
-    /// results when text, language, goals and `craft_proof::dictionary_generation()` match.
+    /// results when text, language, goals, style guide and dictionary generation match.
     pub fn analyze(
         &mut self,
         doc: &Document,
@@ -83,6 +89,7 @@ impl AnalysisEngine {
         goals: WritingGoals,
         personal_dict: &PersonalDictionary,
         ignored: &IgnoredIssueSet,
+        style_guide: &StyleGuide,
     ) -> CoreResult<AnalysisReport> {
         let (proof_lang, canonical_tag) = proof_adapter::resolve_lang(language_tag);
         let text = doc.text();
@@ -102,11 +109,12 @@ impl AnalysisEngine {
         }
 
         let dict_gen = craft_proof::dictionary_generation();
+        let guide_hash = hash_style_guide(style_guide);
         let mut issue_list = IssueList::new();
 
         for (para_start, para_text) in paragraph_slices(text) {
-            let key = paragraph_cache_key(para_text, &canonical_tag, goals, dict_gen);
-            let findings = self.cached_or_compute(key, para_text, proof_lang, goals);
+            let key = paragraph_cache_key(para_text, &canonical_tag, goals, dict_gen, guide_hash);
+            let findings = self.cached_or_compute(key, para_text, proof_lang, goals, style_guide);
             for finding in findings {
                 let abs_start = para_start.saturating_add(finding.rel_start);
                 let abs_end = para_start.saturating_add(finding.rel_end);
@@ -149,13 +157,14 @@ impl AnalysisEngine {
         para_text: &str,
         proof_lang: ProofLang,
         goals: WritingGoals,
+        style_guide: &StyleGuide,
     ) -> Vec<RawFinding> {
         if let Some(cached) = self.paragraph_cache.get(&key) {
             self.cache_hits = self.cache_hits.saturating_add(1);
             return cached.clone();
         }
         self.cache_misses = self.cache_misses.saturating_add(1);
-        let computed = compute_paragraph_findings(para_text, proof_lang, goals);
+        let computed = compute_paragraph_findings(para_text, proof_lang, goals, style_guide);
         if self.paragraph_cache.len() >= MAX_CACHE_ENTRIES {
             self.paragraph_cache.clear();
         }
@@ -168,9 +177,13 @@ fn compute_paragraph_findings(
     para_text: &str,
     proof_lang: ProofLang,
     goals: WritingGoals,
+    style_guide: &StyleGuide,
 ) -> Vec<RawFinding> {
     let mut findings = proof_adapter::check_paragraph(para_text, proof_lang);
+    findings.extend(contextual::check_paragraph(para_text, proof_lang));
+    findings.extend(variants::check_paragraph(para_text, proof_lang));
     findings.extend(clarity::check_paragraph(para_text, proof_lang, goals));
+    findings.extend(style_guide_eval::check_paragraph(para_text, style_guide));
     findings.sort_by_key(|f| (f.rel_start, f.rel_end, f.rule_id));
     findings
 }
@@ -208,7 +221,19 @@ fn paragraph_slices(text: &str) -> Vec<(usize, &str)> {
     slices
 }
 
-fn paragraph_cache_key(para_text: &str, lang_tag: &str, goals: WritingGoals, dict_gen: u64) -> u64 {
+fn hash_style_guide(style_guide: &StyleGuide) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    style_guide.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn paragraph_cache_key(
+    para_text: &str,
+    lang_tag: &str,
+    goals: WritingGoals,
+    dict_gen: u64,
+    guide_hash: u64,
+) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     fnv_mix(&mut hash, para_text.as_bytes());
     fnv_mix(&mut hash, &[0xff]);
@@ -219,6 +244,7 @@ fn paragraph_cache_key(para_text: &str, lang_tag: &str, goals: WritingGoals, dic
     fnv_mix(&mut hash, goals.context.as_str().as_bytes());
     fnv_mix(&mut hash, goals.purpose.as_str().as_bytes());
     fnv_mix(&mut hash, &dict_gen.to_le_bytes());
+    fnv_mix(&mut hash, &guide_hash.to_le_bytes());
     hash
 }
 

@@ -23,13 +23,15 @@ mod glossary;
 mod goals;
 mod issue;
 mod metrics;
+mod snippets;
 mod stats;
+mod style_guide;
 
 pub use doc::{Document, MAX_DOCUMENT_BYTES, MAX_UNDO_STEPS, TextSpan};
 pub use error::{BoundsSnapshot, CoreError, CoreResult};
 pub use glossary::{
-    IgnoredIssueKey, IgnoredIssueSet, MAX_CUSTOM_WORDS, MAX_IGNORED_ISSUES, MAX_TERM_BYTES,
-    PersonalDictionary,
+    IgnoredIssueKey, IgnoredIssueSet, MAX_CUSTOM_FILE_BYTES, MAX_CUSTOM_WORDS, MAX_IGNORED_ISSUES,
+    MAX_TERM_BYTES, PersonalDictionary,
 };
 pub use goals::{Audience, Context, Formality, MAX_GOAL_VALUE_BYTES, Purpose, WritingGoals};
 pub use issue::{
@@ -40,7 +42,13 @@ pub use metrics::{
     CategoryScoreBreakdown, ReadabilityLevel, ReadabilityMetrics, ToneProfile, ToneSignal,
     ToneSignalKind, WritingScore,
 };
+pub use snippets::{
+    MAX_SNIPPET_BYTES, MAX_SNIPPET_PREFIX_BYTES, MAX_SNIPPETS, Snippet, SnippetCatalog,
+};
 pub use stats::TextStats;
+pub use style_guide::{
+    MAX_RULE_PATTERN_BYTES, MAX_STYLE_RULES, StyleGuide, StyleRule, StyleRuleKind,
+};
 
 #[cfg(test)]
 mod tests;

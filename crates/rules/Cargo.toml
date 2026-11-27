@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Deterministic proofing, clarity, style, readability and tone pipeline for grammarcraft"
+description = "Deterministic proofing, contextual, variants, clarity, style-guide, readability and tone pipeline for grammarcraft"
 
 [lints]
 workspace = true
@@ -12,3 +12,4 @@ workspace = true
 [dependencies]
 grammarcraft-core = { workspace = true }
 craft-proof = { workspace = true }
+regex = { workspace = true }

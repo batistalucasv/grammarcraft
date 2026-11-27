@@ -84,7 +84,7 @@ pub(crate) fn check_paragraph(
     out
 }
 
-fn is_portuguese(lang: ProofLang) -> bool {
+pub(crate) fn is_portuguese(lang: ProofLang) -> bool {
     matches!(lang, ProofLang::Pt)
         || lang
             .pack_locale()

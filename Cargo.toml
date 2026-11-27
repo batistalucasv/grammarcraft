@@ -21,6 +21,7 @@ craft-proof = { git = "https://github.com/storytold/craft-libs", rev = "8be80b00
 craft-atomic = { git = "https://github.com/storytold/craft-libs", rev = "8be80b006888ae023d61eed265241c9b78b84981" }
 
 thiserror = "2"
+regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

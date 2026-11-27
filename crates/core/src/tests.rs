@@ -1,9 +1,13 @@
+use std::collections::BTreeMap;
+
 use crate::{
     Audience, Confidence, Context, CoreError, Document, Formality, IgnoredIssueKey,
-    IgnoredIssueSet, IssueCategory, IssueId, IssueList, MAX_CUSTOM_WORDS, MAX_DOCUMENT_BYTES,
-    MAX_GOAL_VALUE_BYTES, MAX_IGNORED_ISSUES, MAX_ISSUES, MAX_SUGGESTIONS_PER_ISSUE,
-    MAX_TERM_BYTES, PersonalDictionary, Purpose, Replacement, Severity, TextSpan, TextStats,
-    WritingGoals, WritingScore,
+    IgnoredIssueSet, IssueCategory, IssueId, IssueList, MAX_CUSTOM_FILE_BYTES, MAX_CUSTOM_WORDS,
+    MAX_DOCUMENT_BYTES, MAX_GOAL_VALUE_BYTES, MAX_IGNORED_ISSUES, MAX_ISSUES,
+    MAX_RULE_PATTERN_BYTES, MAX_SNIPPET_BYTES, MAX_SNIPPETS, MAX_STYLE_RULES,
+    MAX_SUGGESTIONS_PER_ISSUE, MAX_TERM_BYTES, PersonalDictionary, Purpose, Replacement, Severity,
+    SnippetCatalog, StyleGuide, StyleRule, StyleRuleKind, TextSpan, TextStats, WritingGoals,
+    WritingScore,
 };
 
 #[test]
@@ -280,4 +284,118 @@ fn writing_score_drops_with_open_issues_and_is_100_when_clean() {
     let score = WritingScore::compute(list.items(), 20);
     assert_eq!(score.score, 80);
     assert_eq!(score.breakdown.spelling_and_grammar, 1);
+}
+
+#[test]
+fn personal_dictionary_supports_case_sensitivity_and_custom_dic_utf16le_bom_and_utf8() {
+    let mut dict = PersonalDictionary::new();
+    assert!(dict.add_with_case("ArtCraft", true).expect("exact"));
+    assert!(dict.contains("ArtCraft"));
+    assert!(!dict.contains("artcraft"));
+
+    let utf16_bytes = dict.to_custom_dic_utf16le();
+    assert_eq!(&utf16_bytes[..2], &[0xff, 0xfe]);
+    let round_tripped =
+        PersonalDictionary::from_custom_dic_bytes(&utf16_bytes).expect("valid UTF-16LE");
+    assert!(round_tripped.contains("ArtCraft"));
+
+    let utf8_dict =
+        PersonalDictionary::from_custom_dic_bytes(b"\xef\xbb\xbf# comment\nGrammarCraft\nrust\n")
+            .expect("valid UTF-8");
+    assert!(utf8_dict.contains("GrammarCraft"));
+    assert!(utf8_dict.contains("RUST"));
+
+    let oversized = vec![b'a'; MAX_CUSTOM_FILE_BYTES + 1];
+    assert!(matches!(
+        PersonalDictionary::from_custom_dic_bytes(&oversized),
+        Err(CoreError::InvalidCustomDictionary(_))
+    ));
+    assert!(matches!(
+        PersonalDictionary::from_custom_dic_bytes(&[0xfe, 0xff, 0x00, b'a']),
+        Err(CoreError::InvalidCustomDictionary(_))
+    ));
+}
+
+#[test]
+fn style_guide_enforces_rule_limits_and_pattern_bounds() {
+    let mut guide = StyleGuide::new();
+    let long = "a".repeat(MAX_RULE_PATTERN_BYTES + 1);
+    assert_eq!(
+        StyleRule::new(
+            "too-long",
+            StyleRuleKind::BrandCasing {
+                exact: long,
+                rationale: "brand".into()
+            }
+        ),
+        Err(CoreError::RulePatternTooLong {
+            max: MAX_RULE_PATTERN_BYTES
+        })
+    );
+
+    for i in 0..MAX_STYLE_RULES {
+        let rule = StyleRule::new(
+            &format!("rule-{i}"),
+            StyleRuleKind::PreferredTerm {
+                discouraged: "utilize".into(),
+                preferred: "use".into(),
+                rationale: "simpler".into(),
+            },
+        )
+        .expect("valid rule");
+        assert!(guide.add_rule(rule).expect("within MAX_STYLE_RULES"));
+    }
+    let extra = StyleRule::new(
+        "overflow",
+        StyleRuleKind::BrandCasing {
+            exact: "GrammarCraft".into(),
+            rationale: "brand".into(),
+        },
+    )
+    .expect("valid rule");
+    assert_eq!(
+        guide.add_rule(extra),
+        Err(CoreError::TooManyStyleRules {
+            max: MAX_STYLE_RULES
+        })
+    );
+}
+
+#[test]
+fn snippet_catalog_expands_placeholders_and_enforces_bounds() {
+    let mut catalog = SnippetCatalog::new();
+    assert!(
+        catalog
+            .add(
+                "/greet",
+                "Greeting",
+                "Hello {{ name }}, welcome to {{app}}!"
+            )
+            .expect("valid snippet")
+    );
+    let mut values = BTreeMap::new();
+    values.insert("name".to_owned(), "Lucas".to_owned());
+    values.insert("app".to_owned(), "GrammarCraft".to_owned());
+    let expanded = catalog.expand("/greet", &values).expect("expands");
+    assert_eq!(expanded, "Hello Lucas, welcome to GrammarCraft!");
+
+    let too_big = "x".repeat(MAX_SNIPPET_BYTES + 1);
+    assert_eq!(
+        catalog.add("/big", "Big", &too_big),
+        Err(CoreError::SnippetTooLong {
+            max: MAX_SNIPPET_BYTES
+        })
+    );
+
+    for i in 1..MAX_SNIPPETS {
+        assert!(
+            catalog
+                .add(&format!("/s{i}"), "Title", "Body")
+                .expect("within MAX_SNIPPETS")
+        );
+    }
+    assert_eq!(
+        catalog.add("/overflow", "Overflow", "Body"),
+        Err(CoreError::TooManySnippets { max: MAX_SNIPPETS })
+    );
 }
