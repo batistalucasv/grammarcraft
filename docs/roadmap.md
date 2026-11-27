@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **M3 native `egui` desktop app (`apps/grammarcraft`) implemented on `feat/m3-egui-app` (PR #6 pending merge); `craft-design-lint` / `craft-automation`, Rule 4 trademark checks, corpus verification, and M4–M5 remain open.**
+Status: **M4 hybrid consent-gated AI, inclusive/formality rules, local N-gram similarity, and 12 citation styles + BibTeX implemented on `feat/m4-ai-similarity-citations` (PR #7 pending merge); local ONNX `ModelRunner` (`rten`/`candle` with SHA-256 weights), `SecretStore`/`ConsentFile` persistence, `craft-design-lint`, `--control`, Rule 4 searches, and M5 remain open.**
 
 A milestone is done only when every checkbox is verified in a fresh clone (and on GitHub Actions where noted), never when code is merely drafted.
 
@@ -35,17 +35,17 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 
 - [x] Build `apps/grammarcraft` using `craft` (`ui`, `ui-app`, `theme-store`, `dialogs`; `craft::ui::shell::app::{AppSpec, run}`) with light/dark themes and native file dialogs
 - [x] Render category underlines with redundant encoding (theme colour + distinct stroke pattern + `[!]`/`[~]`/`[i]` severity markers) and interactive suggestion cards
-- [x] Build bidirectional 4-tab Review Pane (`Alerts`, `Goals & Score`, `Tone Profile`, `Style & Snippets`) routing every mutation strictly via `Session::run`
-- [x] Verify keyboard navigation (`Tab`/`Shift+Tab`/`F6`/`Escape`), active AccessKit tree, and 5 headless `egui_kittest` tests
+- [x] Build bidirectional Review Pane (`Alerts`, `Goals & Score`, `Tone Profile`, `Style & Snippets`, `AI Assist`, `Citations & Similarity`) routing every mutation strictly via `Session::run`
+- [x] Verify keyboard navigation (`Tab`/`Shift+Tab`/`F6`/`Escape`), active AccessKit tree, and 7 headless `egui_kittest` tests
 - [ ] Pass `craft-design-lint` compliance check and enable authenticated `craft-automation` control channel (`--control`, confined to automation roots when requested)
 
 ## M4 — Multi-signal tone, hybrid AI assistance & local similarity
 
-- [ ] Expand `ToneProfile` with formality-mismatch checks, treatment/convention consistency, and opt-in inclusive language rules
-- [ ] Integrate `craft-ai-client`, `craft-ai-native` (`SecretStore`, `ConsentFile`, `HistoryFile`), `craft-ai-openai` (`text.complete`), and `craft-ai-egui` with explicit `Local (Offline)` vs `Cloud` status and mandatory remote consent
-- [ ] Add local NLP/tone/GEC `ModelRunner` integration path in `craft-ai-engine-rten` / `craft-ai-engine-candle` (weights downloaded on demand with SHA-256 verification)
-- [ ] Ship `ai.rewrite`, `ai.adjustTone`, `ai.summarize`, `ai.expand`, `ai.draft` with word-level diff preview and atomic single-step undo via `ai.applyResult`
-- [ ] Ship local N-gram/MinHash `Similarity Check` over authorized local corpora and 12-style citation validation/formatting (`CSL`/`BibTeX`)
+- [x] Expand `ToneProfile` and `inclusive_formality.rs` with formality-mismatch checks (`Formality::Formal`) and opt-in inclusive language rules (`WritingGoals::inclusive_language` in EN/PT-BR/ES)
+- [x] Integrate `craft-ai-core`, `craft-ai-openai` (`OpenAiProvider`), and `craft-ai-client` (`AiClient`) with `LocalOfflineBackend` zero-network default and mandatory `ConsentLedger` + `Disclosure` blocking unconsented remote calls
+- [x] Ship `ai.status`, `ai.consent`, `ai.rewrite`, `ai.adjustTone`, `ai.summarize`, `ai.expand`, `ai.draft`, `ai.applyResult`, `ai.discardResult` (35 total commands) with word-level `AiDiffHunk` preview, `AI Assist` UI tab, and atomic single-step undo
+- [x] Ship local N-gram/Jaccard `Similarity Check` (`similarity.check` confined by `AutomationRoots`) and 12-style citation validation/formatting (`BibTeX` parser + `citations.validate`/`citations.format` + `Citations & Similarity` UI tab)
+- [ ] Wire OS `SecretStore` / `ConsentFile` / `HistoryFile` (`craft-ai-native`) and add local NLP/tone/GEC `ModelRunner` integration in `craft-ai-engine-rten` / `craft-ai-engine-candle` (weights downloaded on demand with SHA-256 verification)
 
 ## M5 — Ecosystem integration, localization & release packaging
 
@@ -69,4 +69,5 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 | 2026-11-27 | M1 | PR #2 merged (`78766d4`): L0 review/metrics/glossary types, L1 `grammarcraft-rules` (`craft-proof`, incremental cache, clarity/readability/`WritingScore`/`ToneProfile`), L2 undo/redo, `craft-atomic` persistence, `AutomationRoots`, 14 `CommandSpec`s, and CLI `check` / `mcp` |
 | 2026-11-27 | M2 | PR #3 merged (`d932c0e`): `deny.toml` SPDX allowlist, L0 `StyleGuide`/`SnippetCatalog`/`CUSTOM.DIC` UTF-16LE+UTF-8, L1 EN/PT-BR contextual confusables + regional variants + linear-time `regex` evaluator, and 9 `style.*`/`snippet.*`/`dict.*` commands (23 total) |
 | 2026-11-27 | M1/M2 | PR #4 merged: `.docx` read/write via `craft-docx` + `craft-wordmodel` (`doc.open`, `doc.save`, `check`), Spanish (`es*`) contextual paronym rules, and clarity language isolation |
-| 2026-11-27 | M3 | PR #5 merged (`ec52b11`, Linux UI packages in `ci.yml`); added `apps/grammarcraft` native `egui` desktop app (`craft::theme_store`, `craft::dialogs`, redundant underlines, bidirectional Review Pane, AccessKit, 5 headless `egui_kittest` tests) and pinned `storytold/egui` + `storytold/winit` |
+| 2026-11-27 | M3 | PR #5 merged (`ec52b11`, Linux UI packages in `ci.yml`); PR #6 merged (`8166126`): native `egui` desktop app (`apps/grammarcraft`), `storytold/egui` + `storytold/winit` pins, 5 `egui_kittest` + AccessKit tests |
+| 2026-11-27 | M4 | Added `craft-ai-core`/`craft-ai-openai`/`craft-ai-client`, `inclusive_formality.rs`, `similarity.rs`, 12 citation styles + BibTeX, 12 new commands (35 total), and `AI Assist` / `Citations & Similarity` desktop tabs (7 UI tests; `cargo xtask ci` green) |
