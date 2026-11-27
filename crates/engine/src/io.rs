@@ -18,6 +18,12 @@ const MAX_OPEN_FILE_BYTES: u64 = (MAX_DOCUMENT_BYTES as u64) * 2;
 /// Maximum `.docx` package size read from disk (16 MiB).
 const MAX_DOCX_FILE_BYTES: u64 = 16 * 1024 * 1024;
 
+/// Maximum local corpus files read in one `similarity.check` invocation.
+const MAX_CORPUS_FILES: usize = 64;
+
+/// Maximum bytes read per local corpus file (512 KiB).
+const MAX_CORPUS_FILE_BYTES: u64 = 512 * 1024;
+
 #[derive(Debug, Serialize, Deserialize)]
 struct DocumentFileV1 {
     version: u32,
@@ -243,4 +249,64 @@ fn is_json_format(path: &str) -> bool {
 
 fn is_docx_format(path: &str) -> bool {
     path.to_ascii_lowercase().ends_with(".docx")
+}
+
+pub(crate) fn load_local_corpus(
+    directory: &str,
+) -> Result<Vec<grammarcraft_rules::LocalCorpusDoc>, CmdError> {
+    let trimmed = directory.trim();
+    if trimmed.is_empty() {
+        return Err(CmdError::Params("`directory` must not be empty".to_owned()));
+    }
+    file_access::check_read(trimmed).map_err(CmdError::Failed)?;
+
+    let dir_path = Path::new(trimmed);
+    let entries = std::fs::read_dir(dir_path).map_err(|e| {
+        CmdError::Failed(format!("failed to read corpus directory `{trimmed}`: {e}"))
+    })?;
+
+    let mut paths = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|e| CmdError::Failed(format!("directory entry error: {e}")))?;
+        let path = entry.path();
+        if path.is_file() && is_corpus_text_file(&path) {
+            paths.push(path);
+        }
+    }
+    paths.sort();
+
+    let mut docs = Vec::new();
+    for path in paths.into_iter().take(MAX_CORPUS_FILES) {
+        let path_str = path.to_string_lossy();
+        file_access::check_read(&path_str).map_err(CmdError::Failed)?;
+        let file = std::fs::File::open(&path).map_err(|e| {
+            CmdError::Failed(format!("failed to open corpus file `{path_str}`: {e}"))
+        })?;
+        let mut raw = Vec::new();
+        file.take(MAX_CORPUS_FILE_BYTES + 1)
+            .read_to_end(&mut raw)
+            .map_err(|e| {
+                CmdError::Failed(format!("failed to read corpus file `{path_str}`: {e}"))
+            })?;
+        if raw.len() as u64 > MAX_CORPUS_FILE_BYTES {
+            continue;
+        }
+        if let Ok(text) = std::str::from_utf8(&raw) {
+            let source_name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path_str.into_owned());
+            docs.push(grammarcraft_rules::LocalCorpusDoc {
+                source_name,
+                text: text.to_owned(),
+            });
+        }
+    }
+    Ok(docs)
+}
+
+fn is_corpus_text_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|ext| matches!(ext.to_ascii_lowercase().as_str(), "txt" | "md"))
 }

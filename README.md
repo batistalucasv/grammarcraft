@@ -1,6 +1,6 @@
 # GrammarCraft
 
-A clean-room, pure-Rust writing assistant, grammar checker, and native `egui` desktop editor built on the Craft template: a panic-free domain crate (`grammarcraft-core`), a deterministic incremental proofing, contextual (EN/PT-BR/ES), variant, clarity, style-guide, and tone crate (`grammarcraft-rules`), a command-driven session engine (`grammarcraft-engine`) with `.docx`/`.grammarcraft.json`/`.txt`/`.md` persistence, a native desktop UI (`apps/grammarcraft`), a thin CLI with root-confined MCP (`apps/grammarcraft-cli`), and an automated quality gate (`cargo xtask ci`).
+A clean-room, pure-Rust writing assistant, grammar checker, hybrid AI editor, and native `egui` desktop app built on the Craft template: a panic-free domain crate (`grammarcraft-core`), a deterministic incremental proofing, contextual (EN/PT-BR/ES), variant, clarity, inclusive/formality, style-guide, tone, and local similarity crate (`grammarcraft-rules`), a command-driven session engine (`grammarcraft-engine`) with `.docx`/`.grammarcraft.json`/`.txt`/`.md` persistence and consent-gated AI, a native desktop UI (`apps/grammarcraft`), a thin CLI with root-confined MCP (`apps/grammarcraft-cli`), and an automated quality gate (`cargo xtask ci`).
 
 ## Quick start
 
@@ -9,14 +9,14 @@ cargo xtask ci
 cargo run -p grammarcraft
 cargo run -p grammarcraft-cli -- commands
 cargo run -p grammarcraft-cli -- run doc.set_text '{"text":"Their going to the office to review the colour draft."}'
-cargo run -p grammarcraft-cli -- run goals.set '{"audience":"specialized","formality":"formal"}'
+cargo run -p grammarcraft-cli -- run goals.set '{"audience":"specialized","formality":"formal","inclusive_language":true}'
 cargo run -p grammarcraft-cli -- check path/to/document.docx
 cargo run -p grammarcraft-cli -- mcp --automation-read-root ./docs --automation-write-root ./docs
 ```
 
 Expected:
-- `cargo run -p grammarcraft` launches the native `egui` desktop app powered by the Craft design system (light/dark themes, redundant category underlines, bidirectional 4-tab Review Pane, native file dialogs, keyboard navigation, and AccessKit support).
-- `commands` lists all **23** registered `CommandSpec` entries (`doc.set_text`, `doc.get`, `doc.clear`, `doc.save`, `doc.open`, `history.undo`, `history.redo`, `goals.set`, `stats.measure`, `review.check`, `review.apply`, `review.dismiss`, `dict.add`, `dict.remove`, `dict.import`, `dict.export`, `style.add_rule`, `style.remove_rule`, `style.list`, `snippet.add`, `snippet.remove`, `snippet.expand`, `snippet.list`).
+- `cargo run -p grammarcraft` launches the native `egui` desktop app powered by the Craft design system (light/dark themes, redundant category underlines, bidirectional 6-tab Review Pane including `AI Assist` and `Citations & Similarity`, native file dialogs, keyboard navigation, and AccessKit support).
+- `commands` lists all **35** registered `CommandSpec` entries (`doc.*`, `history.*`, `goals.set`, `stats.measure`, `review.*`, `dict.*`, `style.*`, `snippet.*`, `ai.*`, `similarity.check`, `citations.*`).
 - `run` executes a single command in a fresh in-memory `Session`; use `doc.save` and `doc.open` (`.grammarcraft.json`, `.docx`, `.txt`, `.md`) or `check <file>` / `mcp` to persist state across operations.
 - `mcp` refuses to start unless both `--automation-read-root <dir>` and `--automation-write-root <dir>` are supplied.
 
@@ -24,10 +24,10 @@ Expected:
 
 | Path | What lives there | Rule it enforces |
 |---|---|---|
-| `crates/core` | `Document`, `TextSpan`, `WritingGoals`, `Issue`, `ReadabilityMetrics`, `WritingScore`, `ToneProfile`, `PersonalDictionary` (`CUSTOM.DIC`), `IgnoredIssueSet`, `StyleGuide`, `SnippetCatalog`, `CoreError` | L0: no I/O, no `serde_json`, no UI, bounded input, no panics |
-| `crates/rules` | `AnalysisEngine`, paragraph cache, `craft-proof` adapter, EN/PT-BR/ES contextual confusables, regional variant mix checks, linear-time `regex` `StyleGuide` evaluator, clarity/style/readability/tone rules | L1: pure deterministic analysis (depends on `core`, `craft-proof`, `regex`) |
-| `crates/engine` | `Session`, `CommandSpec`, `Registry`, `CmdError`, bounded undo/redo, `io` (`craft-atomic`, `craft-docx`, `craft-wordmodel`), `file_access` (`AutomationRoots`) | L2: every action is a command; parameters and paths are validated once |
-| `apps/grammarcraft` | Native `egui`/`eframe` desktop app (`craft` `ui`, `ui-app`, `theme-store`, `dialogs`), editor underlines, bidirectional Review Pane, AccessKit, headless `egui_kittest` tests | Front end: all mutations routed through `Session::run` |
+| `crates/core` | `Document`, `TextSpan`, `WritingGoals` (`inclusive_language`), `Issue`, `ReadabilityMetrics`, `WritingScore`, `ToneProfile`, `PersonalDictionary` (`CUSTOM.DIC`), `IgnoredIssueSet`, `StyleGuide`, `SnippetCatalog`, `SimilarityReport`, 12 `CitationStyle`s + BibTeX, `AiProposal` + `compute_word_diff`, `CoreError` | L0: no I/O, no `serde_json`, no UI, bounded input, no panics |
+| `crates/rules` | `AnalysisEngine`, paragraph cache, `craft-proof` adapter, EN/PT-BR/ES contextual & inclusive/formality rules, regional variant mix checks, linear-time `regex` `StyleGuide` evaluator, clarity/style/readability/tone rules, `check_local_similarity` | L1: pure deterministic analysis (depends on `core`, `craft-proof`, `regex`) |
+| `crates/engine` | `Session`, `CommandSpec` (35 commands), `Registry`, `CmdError`, bounded undo/redo, `io` (`craft-atomic`, `craft-docx`, `craft-wordmodel`), `file_access` (`AutomationRoots`), `ai` (`LocalOfflineBackend` + `CraftProviderBackend` with `ConsentLedger`/`Disclosure`) | L2: every action is a command; parameters, paths, and AI consent are validated once |
+| `apps/grammarcraft` | Native `egui`/`eframe` desktop app (`craft` `ui`, `ui-app`, `theme-store`, `dialogs`), editor underlines, bidirectional 6-tab Review Pane (`Alerts`, `Goals & Score`, `Tone Profile`, `Style & Snippets`, `AI Assist`, `Citations & Similarity`), AccessKit, 7 headless `egui_kittest` tests | Front end: all mutations routed through `Session::run` |
 | `apps/grammarcraft-cli` | `commands`, `run`, `check`, `stats`, JSON-RPC stdio `mcp` | Front end: stays thin; behaviour lives in `grammarcraft-engine` |
 | `xtask` | `ci`, `layers`, `assets` | Quality rules are executable gates |
 | `clean-room/` | `README.md`, `assumptions.md`, `plan.md`, `source-log.md` | Clean-room provenance and derivation records |

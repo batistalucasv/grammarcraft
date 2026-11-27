@@ -10,8 +10,8 @@ use craft::ui::runtime::frame::{FrameInput, FrameOutput};
 use craft::ui::shell::app::ShellApp;
 use craft::ui::shell::embed::{self, CloseDecision};
 use grammarcraft_core::{
-    Audience, Context, Formality, Issue, IssueCategory, Purpose, ReadabilityMetrics, ToneProfile,
-    WritingGoals, WritingScore,
+    AiMode, Audience, CitationStyle, Context, Formality, Issue, IssueCategory, Purpose,
+    ReadabilityMetrics, ToneProfile, WritingGoals, WritingScore,
 };
 use grammarcraft_engine::{AnalysisReport, CmdError, Session};
 use serde_json::{Value, json};
@@ -28,6 +28,8 @@ pub enum SidebarTab {
     GoalsAndScore,
     Tone,
     StyleAndSnippets,
+    AiAssist,
+    CitationsAndSimilarity,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -102,6 +104,11 @@ pub struct GrammarCraftApp {
     pub current_path: Option<String>,
     pub style_draft: StyleDraft,
     pub snippet_draft: SnippetDraft,
+    pub ai_instruction: String,
+    pub ai_tone: String,
+    pub citation_style: CitationStyle,
+    pub bibtex_input: String,
+    pub similarity_dir: String,
     pub status_notice: Option<(String, bool)>,
     pub host: Arc<Host>,
     pub(crate) dialogs: Option<Dialogs<FileAction>>,
@@ -132,6 +139,11 @@ impl GrammarCraftApp {
             current_path: None,
             style_draft: StyleDraft::default(),
             snippet_draft: SnippetDraft::default(),
+            ai_instruction: String::new(),
+            ai_tone: "formal".to_owned(),
+            citation_style: CitationStyle::Apa,
+            bibtex_input: "@article{sample2026,\n  author = {Ada Lovelace},\n  title = {Clean-Room Writing Systems},\n  journal = {Journal of Craft},\n  year = {2026}\n}".to_owned(),
+            similarity_dir: String::new(),
             status_notice: None,
             host: build_host(),
             dialogs: None,
@@ -324,9 +336,98 @@ impl GrammarCraftApp {
             "formality": goals.formality.as_str(),
             "context": goals.context.as_str(),
             "purpose": goals.purpose.as_str(),
+            "inclusive_language": goals.inclusive_language,
         });
         if self.run_and_report("goals.set", params) {
             self.refresh_check();
+        }
+    }
+
+    pub fn set_ai_consent(&mut self, locality: &str, granted: bool) {
+        let params = json!({
+            "locality": locality,
+            "granted": granted,
+        });
+        if self.run_and_report("ai.consent", params) {
+            let msg = if locality == "local" {
+                "AI mode set to Local (Offline)".to_owned()
+            } else if granted {
+                "Cloud AI consent granted".to_owned()
+            } else {
+                "Cloud AI mode active (consent required before send)".to_owned()
+            };
+            self.status_notice = Some((msg, false));
+        }
+    }
+
+    pub fn run_ai_action(&mut self, mode: AiMode) {
+        let (id, params) = match mode {
+            AiMode::Rewrite => (
+                "ai.rewrite",
+                json!({ "instruction": self.ai_instruction.trim() }),
+            ),
+            AiMode::AdjustTone => ("ai.adjustTone", json!({ "tone": self.ai_tone.trim() })),
+            AiMode::Summarize => ("ai.summarize", json!({ "max_sentences": 2 })),
+            AiMode::Expand => (
+                "ai.expand",
+                json!({ "instruction": self.ai_instruction.trim() }),
+            ),
+            AiMode::Draft => ("ai.draft", json!({ "prompt": self.ai_instruction.trim() })),
+        };
+        if self.run_and_report(id, params) {
+            self.status_notice = Some((format!("Staged {} diff preview", mode.label()), false));
+        }
+    }
+
+    pub fn apply_ai_proposal(&mut self) {
+        if self.run_and_report("ai.applyResult", json!({})) {
+            self.selected_issue_id = None;
+            self.highlight_span = None;
+            self.sync_editor_from_session();
+            self.status_notice = Some(("Applied AI proposal".to_owned(), false));
+        }
+    }
+
+    pub fn discard_ai_proposal(&mut self) {
+        if self.run_and_report("ai.discardResult", json!({})) {
+            self.status_notice = Some(("Discarded AI proposal".to_owned(), false));
+        }
+    }
+
+    pub fn validate_citations(&mut self) {
+        let bib = self.bibtex_input.clone();
+        if self.run_and_report("citations.validate", json!({ "bibtex": bib })) {
+            let count = self.session.last_citation_issues().len();
+            self.status_notice = Some((format!("Validated BibTeX ({count} warning(s))"), false));
+        }
+    }
+
+    pub fn format_citations(&mut self) {
+        let bib = self.bibtex_input.clone();
+        let style = self.citation_style.as_str();
+        if self.run_and_report("citations.format", json!({ "bibtex": bib, "style": style })) {
+            self.status_notice = Some((
+                format!(
+                    "Formatted bibliography in {}",
+                    self.citation_style.display_name()
+                ),
+                false,
+            ));
+        }
+    }
+
+    pub fn check_similarity(&mut self) {
+        let dir = self.similarity_dir.trim().to_owned();
+        if self.run_and_report("similarity.check", json!({ "directory": dir }))
+            && let Some(report) = self.session.last_similarity()
+        {
+            self.status_notice = Some((
+                format!(
+                    "Similarity: {}% across {} source(s)",
+                    report.overall_percent, report.sources_scanned
+                ),
+                false,
+            ));
         }
     }
 

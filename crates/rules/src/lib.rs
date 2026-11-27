@@ -9,8 +9,10 @@
 
 mod clarity;
 mod contextual;
+mod inclusive_formality;
 mod proof_adapter;
 mod scoring;
+pub mod similarity;
 mod style_guide_eval;
 mod tone;
 mod variants;
@@ -25,6 +27,7 @@ use grammarcraft_core::{
     TextStats, ToneProfile, WritingGoals, WritingScore,
 };
 
+pub use similarity::{LocalCorpusDoc, check_local_similarity};
 pub use style_guide_eval::validate_style_rule;
 
 /// Maximum paragraph cache entries held in memory by [`AnalysisEngine`].
@@ -183,6 +186,9 @@ fn compute_paragraph_findings(
     findings.extend(contextual::check_paragraph(para_text, proof_lang));
     findings.extend(variants::check_paragraph(para_text, proof_lang));
     findings.extend(clarity::check_paragraph(para_text, proof_lang, goals));
+    findings.extend(inclusive_formality::check_paragraph(
+        para_text, proof_lang, goals,
+    ));
     findings.extend(style_guide_eval::check_paragraph(para_text, style_guide));
     findings.sort_by_key(|f| (f.rel_start, f.rel_end, f.rule_id));
     findings
@@ -243,6 +249,7 @@ fn paragraph_cache_key(
     fnv_mix(&mut hash, goals.formality.as_str().as_bytes());
     fnv_mix(&mut hash, goals.context.as_str().as_bytes());
     fnv_mix(&mut hash, goals.purpose.as_str().as_bytes());
+    fnv_mix(&mut hash, &[u8::from(goals.inclusive_language)]);
     fnv_mix(&mut hash, &dict_gen.to_le_bytes());
     fnv_mix(&mut hash, &guide_hash.to_le_bytes());
     hash

@@ -50,6 +50,18 @@ fn commands_lists_the_registry_as_json() {
         "snippet.remove",
         "snippet.expand",
         "snippet.list",
+        "ai.status",
+        "ai.consent",
+        "ai.rewrite",
+        "ai.adjustTone",
+        "ai.summarize",
+        "ai.expand",
+        "ai.draft",
+        "ai.applyResult",
+        "ai.discardResult",
+        "similarity.check",
+        "citations.validate",
+        "citations.format",
     ] {
         assert!(ids.contains(&expected), "missing `{expected}` in {ids:?}");
     }

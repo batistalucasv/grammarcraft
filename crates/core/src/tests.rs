@@ -1,13 +1,14 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    Audience, Confidence, Context, CoreError, Document, Formality, IgnoredIssueKey,
-    IgnoredIssueSet, IssueCategory, IssueId, IssueList, MAX_CUSTOM_FILE_BYTES, MAX_CUSTOM_WORDS,
-    MAX_DOCUMENT_BYTES, MAX_GOAL_VALUE_BYTES, MAX_IGNORED_ISSUES, MAX_ISSUES,
-    MAX_RULE_PATTERN_BYTES, MAX_SNIPPET_BYTES, MAX_SNIPPETS, MAX_STYLE_RULES,
-    MAX_SUGGESTIONS_PER_ISSUE, MAX_TERM_BYTES, PersonalDictionary, Purpose, Replacement, Severity,
-    SnippetCatalog, StyleGuide, StyleRule, StyleRuleKind, TextSpan, TextStats, WritingGoals,
-    WritingScore,
+    AiDiffOp, Audience, CitationStyle, Confidence, Context, CoreError, Document, Formality,
+    IgnoredIssueKey, IgnoredIssueSet, IssueCategory, IssueId, IssueList, MAX_AI_TEXT_BYTES,
+    MAX_BIBTEX_BYTES, MAX_CUSTOM_FILE_BYTES, MAX_CUSTOM_WORDS, MAX_DOCUMENT_BYTES,
+    MAX_GOAL_VALUE_BYTES, MAX_IGNORED_ISSUES, MAX_ISSUES, MAX_RULE_PATTERN_BYTES,
+    MAX_SNIPPET_BYTES, MAX_SNIPPETS, MAX_STYLE_RULES, MAX_SUGGESTIONS_PER_ISSUE, MAX_TERM_BYTES,
+    PersonalDictionary, Purpose, Replacement, Severity, SnippetCatalog, StyleGuide, StyleRule,
+    StyleRuleKind, TextSpan, TextStats, WritingGoals, WritingScore, compute_word_diff,
+    format_bibliography, parse_bibtex_entries, validate_citations,
 };
 
 #[test]
@@ -127,6 +128,7 @@ fn writing_goals_parse_valid_and_reject_invalid_values() {
         formality: Formality::parse("FORMAL").expect("valid formality"),
         context: Context::parse("academic").expect("valid context"),
         purpose: Purpose::parse("persuade").expect("valid purpose"),
+        ..WritingGoals::default()
     };
     assert_eq!(goals.audience, Audience::TechnicalExecutive);
     assert_eq!(goals.formality, Formality::Formal);
@@ -397,5 +399,87 @@ fn snippet_catalog_expands_placeholders_and_enforces_bounds() {
     assert_eq!(
         catalog.add("/overflow", "Overflow", "Body"),
         Err(CoreError::TooManySnippets { max: MAX_SNIPPETS })
+    );
+}
+
+#[test]
+fn writing_goals_inclusive_language_is_opt_in_by_default() {
+    let defaults = WritingGoals::default();
+    assert!(!defaults.inclusive_language);
+}
+
+#[test]
+fn bibtex_parser_and_all_12_citation_styles_format_deterministically() {
+    let bib = r#"
+@article{knuth1984,
+  author = {Donald E. Knuth and Jill Tester},
+  title = {Literate Programming},
+  journal = {The Computer Journal},
+  year = {1984},
+  pages = {97--111},
+  doi = {10.1093/comjnl/27.2.97}
+}
+"#;
+    let entries = parse_bibtex_entries(bib).expect("valid bibtex");
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].key, "knuth1984");
+    assert_eq!(entries[0].authors, vec!["Donald E. Knuth", "Jill Tester"]);
+    assert!(validate_citations(&entries).is_empty());
+
+    assert_eq!(CitationStyle::ALL.len(), 12);
+    let mut rendered = std::collections::HashSet::new();
+    for style in CitationStyle::ALL {
+        let round = CitationStyle::parse(style.as_str()).expect("round trip style");
+        assert_eq!(round, style);
+        let formatted = format_bibliography(&entries, style);
+        assert_eq!(formatted.len(), 1);
+        assert!(formatted[0].contains("Literate Programming"));
+        rendered.insert(formatted[0].clone());
+    }
+    assert!(
+        rendered.len() >= 10,
+        "expected distinct style templates across 12 styles"
+    );
+
+    assert!(matches!(
+        parse_bibtex_entries("@article{broken"),
+        Err(CoreError::InvalidBibtex(_))
+    ));
+    let oversized = format!(
+        "@article{{k, title={{ {} }} }}",
+        "a".repeat(MAX_BIBTEX_BYTES)
+    );
+    assert!(matches!(
+        parse_bibtex_entries(&oversized),
+        Err(CoreError::InvalidBibtex(_))
+    ));
+}
+
+#[test]
+fn compute_word_diff_produces_equal_delete_and_insert_hunks_within_bounds() {
+    let hunks =
+        compute_word_diff("The quick brown fox.", "The fast red fox.").expect("diff succeeds");
+    assert!(
+        hunks
+            .iter()
+            .any(|h| h.op == AiDiffOp::Equal && h.text.contains("The"))
+    );
+    assert!(
+        hunks
+            .iter()
+            .any(|h| h.op == AiDiffOp::Delete && h.text.contains("quick"))
+    );
+    assert!(
+        hunks
+            .iter()
+            .any(|h| h.op == AiDiffOp::Insert && h.text.contains("fast"))
+    );
+
+    let oversized = "a".repeat(MAX_AI_TEXT_BYTES + 1);
+    assert_eq!(
+        compute_word_diff(&oversized, "ok"),
+        Err(CoreError::AiTextTooLong {
+            max: MAX_AI_TEXT_BYTES
+        })
     );
 }

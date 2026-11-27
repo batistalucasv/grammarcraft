@@ -17,16 +17,28 @@
     clippy::unreachable
 )]
 
+mod ai;
+mod citations;
 mod doc;
 mod error;
 mod glossary;
 mod goals;
 mod issue;
 mod metrics;
+mod similarity;
 mod snippets;
 mod stats;
 mod style_guide;
 
+pub use ai::{
+    AiConsentStatus, AiDiffHunk, AiDiffOp, AiLocalityMode, AiMode, AiProposal, MAX_AI_TEXT_BYTES,
+    MAX_DIFF_HUNKS, compute_word_diff,
+};
+pub use citations::{
+    CitationEntry, CitationStyle, CitationValidationIssue, MAX_AUTHORS, MAX_BIBTEX_BYTES,
+    MAX_CITATION_FIELD_BYTES, MAX_CITATIONS, format_bibliography, format_citation,
+    parse_bibtex_entries, validate_citations,
+};
 pub use doc::{Document, MAX_DOCUMENT_BYTES, MAX_UNDO_STEPS, TextSpan};
 pub use error::{BoundsSnapshot, CoreError, CoreResult};
 pub use glossary::{
@@ -41,6 +53,9 @@ pub use issue::{
 pub use metrics::{
     CategoryScoreBreakdown, ReadabilityLevel, ReadabilityMetrics, ToneProfile, ToneSignal,
     ToneSignalKind, WritingScore,
+};
+pub use similarity::{
+    MAX_SIMILARITY_MATCHES, MAX_SOURCE_NAME_BYTES, SimilarityMatch, SimilarityReport,
 };
 pub use snippets::{
     MAX_SNIPPET_BYTES, MAX_SNIPPET_PREFIX_BYTES, MAX_SNIPPETS, Snippet, SnippetCatalog,

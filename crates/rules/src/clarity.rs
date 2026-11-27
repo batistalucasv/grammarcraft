@@ -374,7 +374,7 @@ fn gap_is_plain_spaces(text: &str, left_end: usize, right_start: usize) -> bool 
         .is_some_and(|gap| !gap.is_empty() && gap.chars().all(|c| c == ' '))
 }
 
-fn is_word_boundary(text: &str, start: usize, end: usize) -> bool {
+pub(crate) fn is_word_boundary(text: &str, start: usize, end: usize) -> bool {
     let left_ok = text
         .get(..start)
         .and_then(|s| s.chars().next_back())
@@ -386,7 +386,7 @@ fn is_word_boundary(text: &str, start: usize, end: usize) -> bool {
     left_ok && right_ok
 }
 
-fn match_initial_case(original: &str, replacement: &str) -> String {
+pub(crate) fn match_initial_case(original: &str, replacement: &str) -> String {
     let first_upper = original.chars().next().is_some_and(char::is_uppercase);
     if !first_upper {
         return replacement.to_owned();
