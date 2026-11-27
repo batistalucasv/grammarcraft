@@ -19,9 +19,13 @@
 
 mod doc;
 mod error;
+mod goals;
+mod stats;
 
-pub use doc::{Document, MAX_NOTE_BYTES, MAX_NOTES, Note, NoteId};
+pub use doc::{Document, MAX_DOCUMENT_BYTES, TextSpan};
 pub use error::{CoreError, CoreResult};
+pub use goals::{Audience, Context, Formality, MAX_GOAL_VALUE_BYTES, Purpose, WritingGoals};
+pub use stats::TextStats;
 
 #[cfg(test)]
 mod tests;

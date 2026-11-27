@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use grammarcraft_core::NoteId;
+use grammarcraft_core::{Audience, Context, Formality, Purpose, TextStats, WritingGoals};
 use serde_json::{Value, json};
 
 use crate::{CmdResult, Session};
@@ -21,9 +21,9 @@ use crate::{CmdResult, Session};
 pub struct CommandSpec {
     pub id: &'static str,
     pub label: &'static str,
-    /// Where it lives in a front end, e.g. `Notes › Edit`. Free-form on purpose.
+    /// Where it lives in a front end, e.g. `Document › Edit`. Free-form on purpose.
     pub location: &'static str,
-    /// Portable shortcut (`Mod+N`, `F2`); `Mod` is Ctrl, or ⌘ on macOS.
+    /// Portable shortcut (`Mod+Shift+V`); `Mod` is Ctrl, or ⌘ on macOS.
     pub shortcut: &'static str,
     /// Parameter description for agents and docs, e.g. `{"text": string}`.
     pub params: &'static str,
@@ -67,7 +67,7 @@ impl CommandSpec {
         self
     }
 
-    /// Marks a command that does not change the document.
+    /// Marks a command that does not change the document or session state.
     pub const fn pure(mut self) -> Self {
         self.mutates = false;
         self
@@ -137,59 +137,106 @@ pub fn registry() -> &'static Registry {
 
 fn specs() -> Vec<CommandSpec> {
     vec![
-        CommandSpec::new("note.add", "Add Note", "Notes › Edit", note_add)
-            .key("Mod+N")
+        CommandSpec::new("doc.set_text", "Set Document Text", "Document › Edit", doc_set_text)
+            .key("Mod+Shift+V")
             .params(r#"{"text": string}"#),
-        CommandSpec::new("note.remove", "Remove Note", "Notes › Edit", note_remove)
-            .key("Mod+Shift+Backspace")
-            .params(r#"{"id": number}"#),
-        CommandSpec::new("note.list", "List Notes", "Notes › View", note_list).pure(),
-        CommandSpec::new("note.clear", "Clear Notes", "Notes › Edit", note_clear)
+        CommandSpec::new("doc.get", "Get Document", "Document › View", doc_get)
+            .params("{}")
+            .pure(),
+        CommandSpec::new("doc.clear", "Clear Document", "Document › Edit", doc_clear)
             .params("{}")
             .when(|session| {
                 session
                     .doc()
                     .is_empty()
-                    .then_some("there are no notes to clear")
+                    .then_some("the document is already empty")
             }),
+        CommandSpec::new("goals.set", "Set Writing Goals", "Goals › Configure", goals_set)
+            .params(r#"{"audience"?: string, "formality"?: string, "context"?: string, "purpose"?: string}"#),
+        CommandSpec::new("stats.measure", "Measure Text Stats", "Review › Metrics", stats_measure)
+            .params("{}")
+            .pure(),
     ]
 }
 
-fn note_add(session: &mut Session, params: &Value) -> CmdResult {
+fn doc_set_text(session: &mut Session, params: &Value) -> CmdResult {
     let text = p::req_str(params, "text")?;
-    let id = session.doc_mut().add_note(text)?;
-    Ok(json!({ "id": id.get() }))
+    let stats = session.doc_mut().set_text(text)?;
+    Ok(stats_json(stats))
 }
 
-fn note_remove(session: &mut Session, params: &Value) -> CmdResult {
-    let raw = p::req_u64(params, "id")?;
-    session.doc_mut().remove_note(NoteId::from_raw(raw))?;
-    Ok(json!({ "removed": raw }))
+fn doc_get(session: &mut Session, _params: &Value) -> CmdResult {
+    Ok(json!({
+        "text": session.doc().text(),
+        "goals": goals_json(session.goals()),
+        "stats": stats_json(session.doc().stats()),
+    }))
 }
 
-fn note_list(session: &mut Session, _params: &Value) -> CmdResult {
-    let notes: Vec<Value> = session
-        .doc()
-        .notes()
-        .iter()
-        .map(|note| json!({ "id": note.id.get(), "text": note.text }))
-        .collect();
-    Ok(json!({ "notes": notes }))
+fn doc_clear(session: &mut Session, _params: &Value) -> CmdResult {
+    Ok(json!({ "cleared_bytes": session.doc_mut().clear() }))
 }
 
-fn note_clear(session: &mut Session, _params: &Value) -> CmdResult {
-    Ok(json!({ "removed": session.doc_mut().clear() }))
+fn goals_set(session: &mut Session, params: &Value) -> CmdResult {
+    p::require_object(params)?;
+    let mut next = *session.goals();
+    if let Some(raw) = p::opt_str(params, "audience")? {
+        next.audience = Audience::parse(raw)?;
+    }
+    if let Some(raw) = p::opt_str(params, "formality")? {
+        next.formality = Formality::parse(raw)?;
+    }
+    if let Some(raw) = p::opt_str(params, "context")? {
+        next.context = Context::parse(raw)?;
+    }
+    if let Some(raw) = p::opt_str(params, "purpose")? {
+        next.purpose = Purpose::parse(raw)?;
+    }
+    *session.goals_mut() = next;
+    Ok(goals_json(session.goals()))
+}
+
+fn stats_measure(session: &mut Session, _params: &Value) -> CmdResult {
+    Ok(stats_json(session.doc().stats()))
+}
+
+fn stats_json(stats: TextStats) -> Value {
+    json!({
+        "bytes": stats.bytes,
+        "chars": stats.chars,
+        "words": stats.words,
+        "sentences": stats.sentences,
+        "paragraphs": stats.paragraphs,
+    })
+}
+
+fn goals_json(goals: &WritingGoals) -> Value {
+    json!({
+        "audience": goals.audience.as_str(),
+        "formality": goals.formality.as_str(),
+        "context": goals.context.as_str(),
+        "purpose": goals.purpose.as_str(),
+    })
 }
 
 /// Parameter helpers.
 ///
-/// Commands take `&Value` and never index it directly: a missing key returns an
-/// error naming the parameter, an array or `null` in its place is rejected, and
-/// a number is range-checked before it becomes a `u64`.
+/// Commands take `&Value` and never index it directly: a missing or mistyped
+/// key returns [`CmdError::Params`] naming the parameter.
 pub mod p {
     use serde_json::Value;
 
     use crate::CmdError;
+
+    pub fn require_object(value: &Value) -> Result<(), CmdError> {
+        if value.is_object() {
+            Ok(())
+        } else {
+            Err(CmdError::Params(
+                "parameters must be a JSON object".to_owned(),
+            ))
+        }
+    }
 
     pub fn str<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
         value.get(key).and_then(Value::as_str)
@@ -199,19 +246,12 @@ pub mod p {
         str(value, key).ok_or_else(|| CmdError::Params(format!("`{key}` (string) is required")))
     }
 
-    /// Accepts an integer that fits in `u64`, or a non-negative integral float
-    /// (JSON has one number type, so `3.0` and `3` both arrive as a number).
-    pub fn u64(value: &Value, key: &str) -> Option<u64> {
-        let raw = value.get(key)?;
-        raw.as_u64().or_else(|| {
-            let float = raw.as_f64()?;
-            (float.is_finite() && float >= 0.0 && float.fract() == 0.0 && float <= u64::MAX as f64)
-                .then_some(float as u64)
-        })
-    }
-
-    pub fn req_u64(value: &Value, key: &str) -> Result<u64, CmdError> {
-        u64(value, key)
-            .ok_or_else(|| CmdError::Params(format!("`{key}` (non-negative integer) is required")))
+    pub fn opt_str<'a>(value: &'a Value, key: &str) -> Result<Option<&'a str>, CmdError> {
+        let Some(raw) = value.get(key) else {
+            return Ok(None);
+        };
+        raw.as_str()
+            .map(Some)
+            .ok_or_else(|| CmdError::Params(format!("`{key}` must be a string")))
     }
 }

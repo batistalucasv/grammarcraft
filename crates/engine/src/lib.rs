@@ -25,13 +25,14 @@ mod error;
 pub use cmd::{CommandSpec, Registry, registry};
 pub use error::{CmdError, CmdResult};
 
-use grammarcraft_core::Document;
+use grammarcraft_core::{Document, WritingGoals};
 use serde_json::Value;
 
-/// One editing session: the document plus whatever else outlives a command.
+/// One editing session: the document, writing goals and state that outlives a command.
 #[derive(Debug, Default)]
 pub struct Session {
     doc: Document,
+    goals: WritingGoals,
 }
 
 impl Session {
@@ -41,6 +42,10 @@ impl Session {
 
     pub fn doc(&self) -> &Document {
         &self.doc
+    }
+
+    pub fn goals(&self) -> &WritingGoals {
+        &self.goals
     }
 
     /// Runs a command by id.
@@ -58,9 +63,12 @@ impl Session {
         (spec.run)(self, params)
     }
 
-    /// The only way a command reaches the document. Front ends get `doc()`.
     fn doc_mut(&mut self) -> &mut Document {
         &mut self.doc
+    }
+
+    fn goals_mut(&mut self) -> &mut WritingGoals {
+        &mut self.goals
     }
 }
 

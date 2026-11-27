@@ -1,24 +1,25 @@
 use thiserror::Error;
 
-use crate::NoteId;
-
-/// Everything that can go wrong while enforcing a document invariant.
+/// Everything that can go wrong while enforcing a domain invariant.
 ///
-/// Variants name the rule that was broken and carry the bound that was
-/// exceeded, so a caller can report a useful message without repeating the
-/// limit in its own text.
+/// Variants name the rule that was broken and carry the bound or field that
+/// failed, so callers can distinguish invalid arguments from internal errors.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum CoreError {
-    #[error("the note text is empty")]
+    #[error("the document text is empty")]
     EmptyText,
-    #[error("the note text is longer than {max} bytes")]
+    #[error("the document text is longer than {max} bytes")]
     TextTooLong { max: usize },
-    #[error("a document holds at most {max} notes")]
-    TooManyNotes { max: usize },
-    #[error("there is no note with id {0}")]
-    UnknownNote(NoteId),
-    #[error("note ids are exhausted")]
-    IdsExhausted,
+    #[error("invalid span {start}..{end} for document of {len} bytes")]
+    InvalidSpan {
+        start: usize,
+        end: usize,
+        len: usize,
+    },
+    #[error("byte offset {offset} is not on a UTF-8 character boundary")]
+    NonCharBoundary { offset: usize },
+    #[error("invalid {field} goal `{value}`")]
+    InvalidGoal { field: &'static str, value: String },
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;
