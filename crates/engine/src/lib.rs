@@ -110,6 +110,10 @@ impl Session {
         &self.snippets
     }
 
+    pub fn last_report(&self) -> Option<&AnalysisReport> {
+        self.last_report.as_ref()
+    }
+
     pub fn can_undo(&self) -> bool {
         !self.undo_stack.is_empty()
     }

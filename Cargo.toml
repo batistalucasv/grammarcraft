@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "apps/*", "xtask"]
-default-members = ["crates/*", "apps/grammarcraft-cli", "xtask"]
+default-members = ["crates/*", "apps/grammarcraft", "apps/grammarcraft-cli", "xtask"]
 
 [workspace.package]
 version = "0.1.0"
@@ -21,7 +21,11 @@ craft-proof = { git = "https://github.com/storytold/craft-libs", rev = "8be80b00
 craft-atomic = { git = "https://github.com/storytold/craft-libs", rev = "8be80b006888ae023d61eed265241c9b78b84981" }
 craft-docx = { git = "https://github.com/storytold/craft-libs", rev = "8be80b006888ae023d61eed265241c9b78b84981" }
 craft-wordmodel = { git = "https://github.com/storytold/craft-libs", rev = "8be80b006888ae023d61eed265241c9b78b84981" }
+craft = { git = "https://github.com/storytold/craft-libs", rev = "8be80b006888ae023d61eed265241c9b78b84981", default-features = false }
 
+egui = { version = "0.37", default-features = false }
+eframe = { version = "0.37", default-features = false }
+egui_kittest = "0.37"
 thiserror = "2"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
@@ -58,3 +62,16 @@ opt-level = 3
 lto = "thin"
 codegen-units = 16
 debug = 0
+
+[patch.crates-io]
+ecolor = { git = "https://github.com/storytold/egui.git", rev = "932a73b28560acb1a695533307b2cd0d66a42081" }
+emath = { git = "https://github.com/storytold/egui.git", rev = "932a73b28560acb1a695533307b2cd0d66a42081" }
+epaint = { git = "https://github.com/storytold/egui.git", rev = "932a73b28560acb1a695533307b2cd0d66a42081" }
+epaint_default_fonts = { git = "https://github.com/storytold/egui.git", rev = "932a73b28560acb1a695533307b2cd0d66a42081" }
+egui = { git = "https://github.com/storytold/egui.git", rev = "932a73b28560acb1a695533307b2cd0d66a42081" }
+egui-winit = { git = "https://github.com/storytold/egui.git", rev = "932a73b28560acb1a695533307b2cd0d66a42081" }
+egui-wgpu = { git = "https://github.com/storytold/egui.git", rev = "932a73b28560acb1a695533307b2cd0d66a42081" }
+egui_glow = { git = "https://github.com/storytold/egui.git", rev = "932a73b28560acb1a695533307b2cd0d66a42081" }
+egui_kittest = { git = "https://github.com/storytold/egui.git", rev = "932a73b28560acb1a695533307b2cd0d66a42081" }
+eframe = { git = "https://github.com/storytold/egui.git", rev = "932a73b28560acb1a695533307b2cd0d66a42081" }
+winit = { git = "https://github.com/storytold/winit.git", rev = "a517b3846ee8457d84ee4975110bfda6797c44dc" }
