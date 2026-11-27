@@ -1,0 +1,12 @@
+[package]
+name = "grammarcraft-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Domain types for grammarcraft: documents, notes and the invariants they hold"
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = { workspace = true }

@@ -1,0 +1,53 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/*", "xtask"]
+default-members = ["crates/*", "apps/grammarcraft-cli", "xtask"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.85"
+repository = "https://github.com/batistalucasv/grammarcraft"
+
+# Every internal crate is listed here once, so a version bump or a new shared
+# dependency is one edit. Members reach them with `{ workspace = true }`.
+[workspace.dependencies]
+grammarcraft-core = { path = "crates/core" }
+grammarcraft-engine = { path = "crates/engine" }
+
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# `unsafe_code = "forbid"` is a workspace lint, not a per-crate attribute: a
+# crate cannot opt out of it by forgetting to add `[lints] workspace = true`
+# *and* opting in here is the only way to get the clippy rules below.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+cognitive_complexity = "deny"
+wildcard_imports = "deny"
+dbg_macro = "warn"
+todo = "warn"
+too_many_arguments = "deny"
+# A type this long is a fact of the domain (a handler signature), not debt.
+type_complexity = "allow"
+
+# Dependencies are optimised even in a debug build, while our own crates keep
+# fast rebuilds. Line tables only: full debug info for every dependency
+# multiplies the target directory.
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
+
+[profile.dev]
+opt-level = 1
+debug = "line-tables-only"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 16
+debug = 0

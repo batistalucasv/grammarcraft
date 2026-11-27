@@ -1,0 +1,8 @@
+# Tests may unwrap: a failed assertion should point at the line, not at an
+# error-handling detour. Non-test code is covered by the crate-level `deny`
+# attributes, which this file does not weaken.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true
+cognitive-complexity-threshold = 30

@@ -1,0 +1,4 @@
+# Minimum cargo-nextest. CI installs exactly this version, so an older local
+# nextest refuses to run instead of reporting differences the project does not
+# accept.
+nextest-version = "0.9.150"

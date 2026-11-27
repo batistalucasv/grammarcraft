@@ -1,0 +1,28 @@
+name: CI
+
+# The quality gate for every pull request and every push to main: `cargo xtask ci`, run by the
+# suite's shared workflow in craft-common-actions. This file deliberately has no jobs of its own.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to a pull request cancels its older run; every push to main runs to the end.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  gate:
+    # @main, so a suite-wide CI fix reaches this repository without a pull request here.
+    uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
+    with:
+      command: "cargo xtask ci"
+      # This template has no fonts, no wasm target and no Linux system libraries to install.
+      craft-fonts-ref: ""
+      targets: ""
+      packages: ""
