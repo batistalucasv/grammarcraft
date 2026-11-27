@@ -25,7 +25,7 @@ grammarcraft-cli — grammarcraft from the command line
 USAGE:
   grammarcraft-cli commands                                                list every command as JSON
   grammarcraft-cli run <id> [json]                                         run a command with its parameters (default {})
-  grammarcraft-cli check <file>                                            open and analyze a text/markdown/.grammarcraft.json file
+  grammarcraft-cli check <file>                                            open and analyze a text/markdown/.docx/.grammarcraft.json file
   grammarcraft-cli stats                                                   measure text stats in a fresh session
   grammarcraft-cli mcp --automation-read-root <dir> --automation-write-root <dir>
   grammarcraft-cli -h | --help                                             this text

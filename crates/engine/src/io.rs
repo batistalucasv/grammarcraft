@@ -12,8 +12,11 @@ use crate::{CmdError, file_access};
 /// Current version of the `.grammarcraft.json` document format.
 pub const FORMAT_VERSION: u32 = 1;
 
-/// Maximum raw file bytes read from disk when opening a document.
+/// Maximum raw file bytes read from disk when opening a plain/JSON document.
 const MAX_OPEN_FILE_BYTES: u64 = (MAX_DOCUMENT_BYTES as u64) * 2;
+
+/// Maximum `.docx` package size read from disk (16 MiB).
+const MAX_DOCX_FILE_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct DocumentFileV1 {
@@ -74,6 +77,12 @@ pub(crate) fn save_document(
         let bytes = serde_json::to_vec_pretty(&record)
             .map_err(|e| CmdError::Failed(format!("failed to serialize document: {e}")))?;
         ("grammarcraft.json", bytes)
+    } else if is_docx_format(path) {
+        craft_docx::set_application_name("GrammarCraft");
+        let word_doc = craft_wordmodel::Document::from_text(doc.text());
+        let bytes = craft_docx::write(&word_doc)
+            .map_err(|e| CmdError::Failed(format!("failed to encode docx `{path}`: {e}")))?;
+        ("docx", bytes)
     } else {
         ("plain_text", doc.text().as_bytes().to_vec())
     };
@@ -89,10 +98,14 @@ pub(crate) fn open_document(path: &str) -> Result<LoadedDocument, CmdError> {
     }
     file_access::check_read(path).map_err(CmdError::Failed)?;
 
-    let raw = read_bounded(path, MAX_OPEN_FILE_BYTES)?;
-    if is_json_format(path) {
+    if is_docx_format(path) {
+        let raw = read_bounded(path, MAX_DOCX_FILE_BYTES)?;
+        load_docx_document(path, &raw)
+    } else if is_json_format(path) {
+        let raw = read_bounded(path, MAX_OPEN_FILE_BYTES)?;
         load_json_document(path, &raw)
     } else {
+        let raw = read_bounded(path, MAX_OPEN_FILE_BYTES)?;
         load_plain_document(path, &raw)
     }
 }
@@ -139,6 +152,30 @@ fn read_bounded(path: &str, max_bytes: u64) -> Result<Vec<u8>, CmdError> {
         )));
     }
     Ok(raw)
+}
+
+fn load_docx_document(path: &str, raw: &[u8]) -> Result<LoadedDocument, CmdError> {
+    let word_doc = craft_docx::read(raw)
+        .map_err(|e| CmdError::Params(format!("invalid docx `{path}`: {e}")))?;
+    let text = word_doc.plain_text(craft_wordmodel::StoryRef::Body);
+    if text.len() > MAX_DOCUMENT_BYTES {
+        return Err(CmdError::Params(format!(
+            "the document text is longer than {MAX_DOCUMENT_BYTES} bytes"
+        )));
+    }
+    let mut doc = Document::new();
+    if !text.trim().is_empty() {
+        doc.set_text(&text)?;
+    }
+    Ok(LoadedDocument {
+        doc,
+        language: "en-US".to_owned(),
+        goals: WritingGoals::default(),
+        personal_dict: PersonalDictionary::new(),
+        style_guide: StyleGuide::new(),
+        snippets: SnippetCatalog::new(),
+        format: "docx",
+    })
 }
 
 fn load_json_document(path: &str, raw: &[u8]) -> Result<LoadedDocument, CmdError> {
@@ -202,4 +239,8 @@ fn load_plain_document(path: &str, raw: &[u8]) -> Result<LoadedDocument, CmdErro
 fn is_json_format(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
     lower.ends_with(".grammarcraft.json") || lower.ends_with(".json")
+}
+
+fn is_docx_format(path: &str) -> bool {
+    path.to_ascii_lowercase().ends_with(".docx")
 }
