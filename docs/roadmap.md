@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **M1 core foundation implemented on `feat/m1-rules-and-persistence` (PR #2 pending merge); `deny.toml`, Rule 4 trademark checks, `.docx` support, and M2–M5 remain open.**
+Status: **M2 core contextual, regional variant, `StyleGuide`, `CUSTOM.DIC`, `SnippetCatalog`, and `deny.toml` milestones implemented on `feat/m2-contextual-and-style-rules` (PR #3 pending merge); `.docx` support, Rule 4 trademark searches, desktop UI (M3), and hybrid AI (M4) remain open.**
 
 A milestone is done only when every checkbox is verified in a fresh clone (and on GitHub Actions where noted), never when code is merely drafted.
 
@@ -9,8 +9,8 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 - [x] Copy `craft-template/template/`, rename `myapp` → `grammarcraft` before first commit (`42f4fb7`), verify `cargo xtask ci` locally, and publish `batistalucasv/grammarcraft` `main`
 - [x] Initialize `clean-room/` (`README.md`, `assumptions.md`, `plan.md`, `source-log.md`), `docs/feature-names.md`, `docs/target-app-parity.md`, `docs/gaps.md`, and `docs/roadmap.md`
 - [x] Set `rust-version = "1.95"` in root `Cargo.toml` and migrate `AGENTS.md` to the `craft-agents` block (`RFC-0072`)
+- [x] Configure `deny.toml` enforcing `craft-contrib/standards/licences.md` allowlist (blocking GPL/LGPL/AGPL and NC datasets; `cargo-deny` binary not installed locally for offline execution)
 - [ ] Pin single `storytold/egui` fork revision matching `craft-libs` when introducing desktop UI (`M3`)
-- [ ] Configure `deny.toml` enforcing `craft-contrib/standards/licences.md` allowlist (blocking GPL/LGPL/AGPL and NC datasets)
 - [ ] Complete USPTO, EUIPO/TMview, and WIPO Rule 4 trademark checks in `docs/feature-names.md` before first UI PR / public release
 - [ ] Confirm `gate.yml@main` and `house-rules.yml@main` pass together on PR with branch protection enabled on `main`
 
@@ -25,11 +25,11 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 
 ## M2 — Deterministic writing & style engine
 
-- [ ] Add contextual spelling rules (homophones/paronyms in EN/PT-BR/ES) and regional variant consistency alerts (`en-US`/`en-GB`, `pt-BR`/`pt-PT`)
-- [ ] Expand deterministic grammar rules (agreement, crasis/government in PT-BR, punctuation mechanics, comma splices) without copyleft code or rules
-- [ ] Expand clarity & style analyzers: full `WritingGoals` modulation across categories, vague-verb precision, syntactic rhythm, and expanded bilingual redundancy/passive tables
+- [x] Add EN/PT-BR contextual spelling rules (homophones/paronyms) and regional variant consistency alerts (`en-US`/`en-GB`, `pt-BR`/`pt-PT`)
+- [x] Implement `PersonalDictionary` (`case_sensitive` + `CUSTOM.DIC` UTF-16LE BOM and UTF-8), declarative `StyleGuide` (`PreferredTerm`, `BrandCasing`, linear-time `PatternRule` with `regex = "1"`), and `SnippetCatalog` (`{{placeholder}}` expansion) across L0/L1/L2 + 9 `style.*`/`snippet.*`/`dict.*` commands (23 total)
+- [x] Implement initial clarity & style analyzers (EN/PT-BR passive voice modulated by `WritingGoals`, long sentences, common redundancies, sliding-window lexical repetition), open readability indices (Flesch, Flesch-Kincaid, Gulpease, reading/speaking times), and transparent 0–100 `WritingScore`
+- [ ] Expand deterministic grammar rules (Spanish contextuals, agreement, crasis/government in PT-BR, punctuation mechanics, comma splices) and vague-verb/syntactic-rhythm analyzers without copyleft code or rules
 - [ ] Configure `clean-room/derivation/`, `freeze.md`, and `verification.md` corpus accuracy checks plus `SARIF` CLI output
-- [ ] Implement `PersonalDictionary` (`CUSTOM.DIC` UTF-16LE + UTF-8), declarative `StyleRules` (linear-time `regex`), and `SnippetCatalog` (`{{placeholder}}` expansion) in L0/L1/L2
 
 ## M3 — Native `egui` desktop app & accessibility
 
@@ -66,4 +66,5 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 | --- | --- | --- |
 | 2026-11-27 | M0 | Instantiated from `craft-template` (`42f4fb7`), pushed `main` to `batistalucasv/grammarcraft`, and initialized `clean-room/` records, `docs/feature-names.md`, `docs/target-app-parity.md`, `docs/gaps.md`, and `docs/roadmap.md` |
 | 2026-11-27 | M0/M1 | PR #1 merged (`65136ca`): `Document`, `TextSpan`, `WritingGoals`, `TextStats`, `CoreError`, 5 commands, CLI tests, and `AGENTS.md` `craft-agents` migration (`RFC-0072`) |
-| 2026-11-27 | M1 | Added L0 review/metrics/glossary types, L1 `grammarcraft-rules` (`craft-proof`, incremental cache, clarity/readability/`WritingScore`/`ToneProfile`), L2 undo/redo, `craft-atomic` persistence, `AutomationRoots`, 14 `CommandSpec`s, and CLI `check` / `mcp` (`cargo xtask ci` green) |
+| 2026-11-27 | M1 | PR #2 merged (`78766d4`): L0 review/metrics/glossary types, L1 `grammarcraft-rules` (`craft-proof`, incremental cache, clarity/readability/`WritingScore`/`ToneProfile`), L2 undo/redo, `craft-atomic` persistence, `AutomationRoots`, 14 `CommandSpec`s, and CLI `check` / `mcp` |
+| 2026-11-27 | M2 | Added `deny.toml` SPDX allowlist, L0 `StyleGuide`/`SnippetCatalog`/`CUSTOM.DIC` UTF-16LE+UTF-8, L1 EN/PT-BR contextual confusables + regional variants + linear-time `regex` evaluator, and 9 `style.*`/`snippet.*`/`dict.*` commands (23 total; `cargo xtask ci` green) |
