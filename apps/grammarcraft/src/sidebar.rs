@@ -3,7 +3,8 @@ use craft::theme::variant::{Emphasis, Tone};
 use craft::ui::contract::{Props as _, Show as _};
 use craft::ui::display::Badge;
 use grammarcraft_core::{
-    Issue, IssueCategory, ReadabilityLevel, StyleRuleKind, ToneSignal, WritingGoals,
+    AiConsentStatus, AiDiffOp, AiLocalityMode, AiMode, CitationStyle, Issue, IssueCategory,
+    ReadabilityLevel, StyleRuleKind, ToneSignal, WritingGoals,
 };
 
 use crate::state::{
@@ -31,6 +32,8 @@ pub fn show(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
             SidebarTab::GoalsAndScore => show_goals_tab(app, ui),
             SidebarTab::Tone => show_tone_tab(app, ui),
             SidebarTab::StyleAndSnippets => show_style_snippets_tab(app, ui),
+            SidebarTab::AiAssist => show_ai_assist_tab(app, ui),
+            SidebarTab::CitationsAndSimilarity => show_citations_similarity_tab(app, ui),
         });
 }
 
@@ -43,6 +46,11 @@ fn show_tab_strip(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
         (SidebarTab::GoalsAndScore, "Goals & Score".to_owned()),
         (SidebarTab::Tone, "Tone Profile".to_owned()),
         (SidebarTab::StyleAndSnippets, "Style & Snippets".to_owned()),
+        (SidebarTab::AiAssist, "AI Assist".to_owned()),
+        (
+            SidebarTab::CitationsAndSimilarity,
+            "Citations & Similarity".to_owned(),
+        ),
     ];
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 4.0;
@@ -188,6 +196,11 @@ fn show_goals_tab(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
     let mut updated = current;
 
     show_goal_selectors(&mut updated, ui);
+    ui.add_space(6.0);
+    ui.checkbox(
+        &mut updated.inclusive_language,
+        "Inclusive language (opt-in)",
+    );
     if updated != current {
         app.set_goals(updated);
     }
@@ -478,5 +491,190 @@ fn readability_label(level: ReadabilityLevel) -> &'static str {
         ReadabilityLevel::Standard => "Standard",
         ReadabilityLevel::Difficult => "Difficult",
         ReadabilityLevel::Academic => "Academic",
+    }
+}
+
+fn show_ai_assist_tab(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
+    ui.heading("AI Writing Assistant");
+    let locality = app.session.ai_locality_mode();
+    let consent = app.session.ai_consent_status();
+    let locality_label = match locality {
+        AiLocalityMode::LocalOffline => "Mode: Local (Offline)",
+        AiLocalityMode::CloudConsentRequired => "Mode: Cloud (Consent Required)",
+    };
+    ui.strong(locality_label);
+
+    ui.horizontal_wrapped(|ui| {
+        if craft_button(ui, "Use Local (Offline)", true).clicked() {
+            app.set_ai_consent("local", false);
+        }
+        if craft_button(ui, "Use Cloud Mode", true).clicked() {
+            app.set_ai_consent("cloud", false);
+        }
+        if locality == AiLocalityMode::CloudConsentRequired {
+            let granted = matches!(consent, Ok(AiConsentStatus::Granted { .. }));
+            if granted {
+                if craft_button(ui, "Revoke Cloud Consent", true).clicked() {
+                    app.set_ai_consent("cloud", false);
+                }
+            } else if primary_button(ui, "Grant Cloud Consent", true).clicked() {
+                app.set_ai_consent("cloud", true);
+            }
+        }
+    });
+
+    if let Ok(status) = consent {
+        let status_text = match status {
+            AiConsentStatus::NotRequiredLocal => "Privacy: 100% local offline execution".to_owned(),
+            AiConsentStatus::RequiredPending {
+                destination,
+                payload_bytes,
+                ..
+            } => format!("Consent pending for {destination} ({payload_bytes} bytes)"),
+            AiConsentStatus::Granted { destination } => {
+                format!("Consent granted for {destination}")
+            }
+        };
+        ui.label(status_text);
+    }
+
+    ui.add_space(6.0);
+    ui.label("Instruction / Draft Prompt");
+    let instr_resp = ui.text_edit_singleline(&mut app.ai_instruction);
+    ui.ctx().accesskit_node_builder(instr_resp.id, |node| {
+        node.set_label("AI Instruction or Prompt");
+    });
+
+    ui.horizontal(|ui| {
+        ui.label("Target Tone");
+        let tone_resp = ui.text_edit_singleline(&mut app.ai_tone);
+        ui.ctx().accesskit_node_builder(tone_resp.id, |node| {
+            node.set_label("AI Target Tone");
+        });
+    });
+
+    let has_doc = !app.session.doc().is_empty();
+    ui.horizontal_wrapped(|ui| {
+        if primary_button(ui, "AI Rewrite", has_doc).clicked() {
+            app.run_ai_action(AiMode::Rewrite);
+        }
+        if craft_button(ui, "AI Adjust Tone", has_doc).clicked() {
+            app.run_ai_action(AiMode::AdjustTone);
+        }
+        if craft_button(ui, "AI Summarize", has_doc).clicked() {
+            app.run_ai_action(AiMode::Summarize);
+        }
+        if craft_button(ui, "AI Expand", has_doc).clicked() {
+            app.run_ai_action(AiMode::Expand);
+        }
+        if craft_button(ui, "AI Draft", true).clicked() {
+            app.run_ai_action(AiMode::Draft);
+        }
+    });
+
+    if let Some(proposal) = app.session.pending_ai_proposal().cloned() {
+        ui.add_space(8.0);
+        ui.separator();
+        ui.strong(format!(
+            "Staged {} Proposal ({})",
+            proposal.mode.label(),
+            proposal.provider_label
+        ));
+        egui::Frame::group(ui.style())
+            .fill(app.colors.bg_raised)
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    for hunk in &proposal.hunks {
+                        match hunk.op {
+                            AiDiffOp::Equal => {
+                                ui.label(&hunk.text);
+                            }
+                            AiDiffOp::Insert => {
+                                ui.colored_label(app.colors.status_good, format!("+{}", hunk.text));
+                            }
+                            AiDiffOp::Delete => {
+                                ui.colored_label(app.colors.status_bad, format!("-{}", hunk.text));
+                            }
+                        }
+                    }
+                });
+            });
+        ui.horizontal(|ui| {
+            if primary_button(ui, "Apply AI Proposal", true).clicked() {
+                app.apply_ai_proposal();
+            }
+            if craft_button(ui, "Discard Proposal", true).clicked() {
+                app.discard_ai_proposal();
+            }
+        });
+    }
+}
+
+fn show_citations_similarity_tab(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
+    ui.heading("Citations (12 Styles & BibTeX)");
+    let current_style = app.citation_style;
+    let combo = egui::ComboBox::from_id_salt("citation_style_combo")
+        .selected_text(current_style.display_name())
+        .show_ui(ui, |ui| {
+            for style in CitationStyle::ALL {
+                ui.selectable_value(&mut app.citation_style, style, style.display_name());
+            }
+        });
+    ui.ctx().accesskit_node_builder(combo.response.id, |node| {
+        node.set_label("Citation Style");
+    });
+
+    let bib_resp = ui.add(
+        egui::TextEdit::multiline(&mut app.bibtex_input)
+            .desired_width(f32::INFINITY)
+            .desired_rows(5),
+    );
+    ui.ctx().accesskit_node_builder(bib_resp.id, |node| {
+        node.set_label("BibTeX Input");
+    });
+
+    ui.horizontal(|ui| {
+        if craft_button(ui, "Validate Citations", true).clicked() {
+            app.validate_citations();
+        }
+        if primary_button(ui, "Format Bibliography", true).clicked() {
+            app.format_citations();
+        }
+    });
+
+    for issue in app.session.last_citation_issues() {
+        ui.colored_label(
+            app.colors.status_warn,
+            format!("[{}] {}: {}", issue.key, issue.field, issue.message),
+        );
+    }
+    for formatted in app.session.last_citations() {
+        ui.label(formatted);
+    }
+
+    ui.add_space(10.0);
+    ui.separator();
+    ui.heading("Local Similarity Check");
+    ui.horizontal(|ui| {
+        ui.label("Corpus Dir");
+        let dir_resp = ui.text_edit_singleline(&mut app.similarity_dir);
+        ui.ctx().accesskit_node_builder(dir_resp.id, |node| {
+            node.set_label("Corpus Directory");
+        });
+    });
+    if primary_button(ui, "Check Similarity", !app.session.doc().is_empty()).clicked() {
+        app.check_similarity();
+    }
+    if let Some(report) = app.session.last_similarity() {
+        ui.strong(format!(
+            "Overall Similarity: {}% ({} local source(s))",
+            report.overall_percent, report.sources_scanned
+        ));
+        for m in &report.matches {
+            ui.label(format!(
+                "• {} ({}%, {} shingles): \"{}\"",
+                m.source_name, m.jaccard_percent, m.shared_shingles, m.matched_excerpt
+            ));
+        }
     }
 }

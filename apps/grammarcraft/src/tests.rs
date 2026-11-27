@@ -165,3 +165,74 @@ fn theme_toggle_and_tone_and_dismiss_actions_work_headlessly() {
     h.run_steps(3);
     assert!(h.state().session.personal_dict().contains("recieve"));
 }
+
+#[test]
+fn ai_cloud_consent_rewrite_apply_and_undo_flow() {
+    let mut h = harness_with_text("This update is due to the fact that we shipped.");
+
+    h.get_by_label("AI Assist").click();
+    h.run_steps(2);
+
+    // Cloud mode without consent must refuse execution cleanly.
+    h.get_by_label("Use Cloud Mode").click();
+    h.run_steps(2);
+    h.get_by_label("AI Rewrite").click();
+    h.run_steps(2);
+    assert!(h.state().session.pending_ai_proposal().is_none());
+
+    // Grant consent on Cloud, then switch to Local (Offline) to stage deterministic diff.
+    h.get_by_label("Grant Cloud Consent").click();
+    h.run_steps(2);
+    assert!(
+        h.query_by_label_contains("Consent granted").is_some(),
+        "expected granted cloud consent status"
+    );
+
+    h.get_by_label("Use Local (Offline)").click();
+    h.run_steps(2);
+    h.get_by_label("AI Rewrite").click();
+    h.run_steps(3);
+
+    assert!(h.query_by_label("Apply AI Proposal").is_some());
+    h.get_by_label("Apply AI Proposal").click();
+    h.run_steps(3);
+    assert_eq!(
+        h.state().session.doc().text(),
+        "This update is because we shipped."
+    );
+
+    h.get_by_label("Undo").click();
+    h.run_steps(3);
+    assert_eq!(
+        h.state().session.doc().text(),
+        "This update is due to the fact that we shipped."
+    );
+}
+
+#[test]
+fn citations_tab_formats_bibliography_and_inclusive_toggle_updates_alerts() {
+    let mut h = harness_with_text("We inform the chairman.");
+
+    h.get_by_label("Citations & Similarity").click();
+    h.run_steps(2);
+    h.get_by_label("Format Bibliography").click();
+    h.run_steps(2);
+    assert!(
+        h.query_by_label_contains("Clean-Room Writing Systems")
+            .is_some(),
+        "expected formatted bibliography output"
+    );
+
+    h.get_by_label("Goals & Score").click();
+    h.run_steps(2);
+    h.get_by_label("Inclusive language (opt-in)").click();
+    h.run_steps(3);
+    assert!(h.state().session.goals().inclusive_language);
+    assert!(
+        h.state()
+            .issues()
+            .iter()
+            .any(|i| i.rule_id == "style.inclusive"),
+        "expected opt-in inclusive rule alert for `chairman`"
+    );
+}
