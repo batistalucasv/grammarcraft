@@ -13,11 +13,13 @@
     clippy::unreachable
 )]
 
+pub mod ai;
 mod cmd;
 mod error;
 pub mod file_access;
 mod io;
 
+pub use ai::{AiBackend, CraftProviderBackend, LocalOfflineBackend};
 pub use cmd::{CommandSpec, Registry, registry};
 pub use error::{CmdError, CmdResult};
 pub use grammarcraft_rules::AnalysisReport;
@@ -25,11 +27,13 @@ pub use grammarcraft_rules::AnalysisReport;
 use std::collections::VecDeque;
 
 use grammarcraft_core::{
-    Document, IgnoredIssueSet, MAX_UNDO_STEPS, PersonalDictionary, SnippetCatalog, StyleGuide,
-    WritingGoals,
+    AiProposal, CitationValidationIssue, Document, IgnoredIssueSet, MAX_UNDO_STEPS,
+    PersonalDictionary, SimilarityReport, SnippetCatalog, StyleGuide, WritingGoals,
 };
 use grammarcraft_rules::AnalysisEngine;
 use serde_json::Value;
+
+use crate::ai::AiSessionState;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct HistorySnapshot {
@@ -57,6 +61,10 @@ pub struct Session {
     undo_stack: VecDeque<HistorySnapshot>,
     redo_stack: VecDeque<HistorySnapshot>,
     last_report: Option<AnalysisReport>,
+    pub(crate) ai: AiSessionState,
+    last_similarity: Option<SimilarityReport>,
+    last_citations: Vec<String>,
+    last_citation_issues: Vec<CitationValidationIssue>,
 }
 
 impl Default for Session {
@@ -73,6 +81,10 @@ impl Default for Session {
             undo_stack: VecDeque::new(),
             redo_stack: VecDeque::new(),
             last_report: None,
+            ai: AiSessionState::default(),
+            last_similarity: None,
+            last_citations: Vec::new(),
+            last_citation_issues: Vec::new(),
         }
     }
 }
@@ -112,6 +124,42 @@ impl Session {
 
     pub fn last_report(&self) -> Option<&AnalysisReport> {
         self.last_report.as_ref()
+    }
+
+    pub fn pending_ai_proposal(&self) -> Option<&AiProposal> {
+        self.ai.pending_proposal.as_ref()
+    }
+
+    pub fn has_pending_ai_proposal(&self) -> bool {
+        self.ai.pending_proposal.is_some()
+    }
+
+    pub fn ai_locality_mode(&self) -> grammarcraft_core::AiLocalityMode {
+        self.ai.mode
+    }
+
+    pub fn ai_consent_status(&self) -> Result<grammarcraft_core::AiConsentStatus, CmdError> {
+        self.ai.consent_status(self.doc.len_bytes())
+    }
+
+    pub fn set_cloud_provider(
+        &mut self,
+        model: &str,
+        provider: std::sync::Arc<dyn craft_ai_core::Provider>,
+    ) -> Result<(), CmdError> {
+        self.ai.set_cloud_provider(model, provider)
+    }
+
+    pub fn last_similarity(&self) -> Option<&SimilarityReport> {
+        self.last_similarity.as_ref()
+    }
+
+    pub fn last_citations(&self) -> &[String] {
+        &self.last_citations
+    }
+
+    pub fn last_citation_issues(&self) -> &[CitationValidationIssue] {
+        &self.last_citation_issues
     }
 
     pub fn can_undo(&self) -> bool {

@@ -4,10 +4,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::OnceLock;
 
 use grammarcraft_core::{
-    Audience, Context, CoreError, Formality, IgnoredIssueKey, Issue, IssueId, Purpose, StyleRule,
-    StyleRuleKind, TextStats, WritingGoals,
+    AiLocalityMode, AiMode, Audience, CitationStyle, Context, CoreError, Formality,
+    IgnoredIssueKey, Issue, IssueId, Purpose, StyleRule, StyleRuleKind, TextStats, WritingGoals,
+    format_bibliography, parse_bibtex_entries, validate_citations,
 };
-use grammarcraft_rules::{AnalysisReport, validate_style_rule};
+use grammarcraft_rules::{AnalysisReport, check_local_similarity, validate_style_rule};
 use serde_json::{Value, json};
 
 use crate::{CmdError, CmdResult, Session, io};
@@ -149,7 +150,7 @@ fn specs() -> Vec<CommandSpec> {
             .params("{}")
             .when(|session| (!session.can_redo()).then_some("nothing to redo")),
         CommandSpec::new("goals.set", "Set Writing Goals", "Goals › Configure", goals_set)
-            .params(r#"{"audience"?: string, "formality"?: string, "context"?: string, "purpose"?: string, "language"?: string}"#),
+            .params(r#"{"audience"?: string, "formality"?: string, "context"?: string, "purpose"?: string, "language"?: string, "inclusive_language"?: boolean}"#),
         CommandSpec::new("stats.measure", "Measure Text Stats", "Review › Metrics", stats_measure)
             .params("{}")
             .pure(),
@@ -187,7 +188,46 @@ fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("snippet.list", "List Snippets", "Snippets › Library", snippet_list)
             .params("{}")
             .pure(),
+        CommandSpec::new("ai.status", "AI Assistant Status", "AI › Assist", ai_status)
+            .params("{}")
+            .pure(),
+        CommandSpec::new("ai.consent", "Configure AI Consent", "AI › Privacy", ai_consent)
+            .params(r#"{"granted": boolean, "locality"?: "local"|"cloud", "endpoint"?: string}"#),
+        CommandSpec::new("ai.rewrite", "AI Rewrite", "AI › Assist", ai_rewrite)
+            .params(r#"{"instruction"?: string}"#)
+            .when(require_non_empty_doc),
+        CommandSpec::new("ai.adjustTone", "AI Adjust Tone", "AI › Assist", ai_adjust_tone)
+            .params(r#"{"tone"?: string}"#)
+            .when(require_non_empty_doc),
+        CommandSpec::new("ai.summarize", "AI Summarize", "AI › Assist", ai_summarize)
+            .params(r#"{"max_sentences"?: number}"#)
+            .when(require_non_empty_doc),
+        CommandSpec::new("ai.expand", "AI Expand", "AI › Assist", ai_expand)
+            .params(r#"{"instruction"?: string}"#)
+            .when(require_non_empty_doc),
+        CommandSpec::new("ai.draft", "AI Draft", "AI › Assist", ai_draft)
+            .params(r#"{"prompt": string}"#),
+        CommandSpec::new("ai.applyResult", "Apply AI Proposal", "AI › Assist", ai_apply_result)
+            .params(r#"{"proposal_id"?: number}"#)
+            .when(|session| (!session.has_pending_ai_proposal()).then_some("no pending AI proposal")),
+        CommandSpec::new("ai.discardResult", "Discard AI Proposal", "AI › Assist", ai_discard_result)
+            .params("{}")
+            .when(|session| (!session.has_pending_ai_proposal()).then_some("no pending AI proposal")),
+        CommandSpec::new("similarity.check", "Check Local Similarity", "Review › Similarity", similarity_check)
+            .params(r#"{"directory": string}"#)
+            .when(require_non_empty_doc)
+            .pure(),
+        CommandSpec::new("citations.validate", "Validate Citations", "Citations › BibTeX", citations_validate)
+            .params(r#"{"bibtex": string}"#)
+            .pure(),
+        CommandSpec::new("citations.format", "Format Citations", "Citations › BibTeX", citations_format)
+            .params(r#"{"bibtex": string, "style": string}"#)
+            .pure(),
     ]
+}
+
+fn require_non_empty_doc(session: &Session) -> Option<&'static str> {
+    session.doc().is_empty().then_some("the document is empty")
 }
 
 fn doc_set_text(session: &mut Session, params: &Value) -> CmdResult {
@@ -288,6 +328,9 @@ fn goals_set(session: &mut Session, params: &Value) -> CmdResult {
     }
     if let Some(raw) = p::opt_str(params, "purpose")? {
         next.purpose = Purpose::parse(raw)?;
+    }
+    if let Some(inclusive) = p::opt_bool(params, "inclusive_language")? {
+        next.inclusive_language = inclusive;
     }
     let next_lang = match p::opt_str(params, "language")? {
         Some(raw) => {
@@ -609,6 +652,159 @@ fn snippet_list(session: &mut Session, _params: &Value) -> CmdResult {
     }))
 }
 
+fn ai_status(session: &mut Session, _params: &Value) -> CmdResult {
+    let consent = session.ai.consent_status(session.doc.len_bytes())?;
+    let proposal = session.ai.pending_proposal.as_ref();
+    Ok(json!({
+        "locality": session.ai.mode.as_str(),
+        "endpoint": session.ai.endpoint,
+        "consent": consent,
+        "has_pending_proposal": proposal.is_some(),
+        "pending_proposal": proposal,
+    }))
+}
+
+fn ai_consent(session: &mut Session, params: &Value) -> CmdResult {
+    p::require_object(params)?;
+    let granted = params
+        .get("granted")
+        .and_then(Value::as_bool)
+        .ok_or_else(|| CmdError::Params("`granted` (boolean) is required".to_owned()))?;
+    if let Some(raw_locality) = p::opt_str(params, "locality")? {
+        session.ai.mode = AiLocalityMode::parse(raw_locality)?;
+    }
+    if let Some(endpoint) = p::opt_str(params, "endpoint")? {
+        let trimmed = endpoint.trim();
+        if trimmed.is_empty() {
+            return Err(CmdError::Params("`endpoint` must not be empty".to_owned()));
+        }
+        session.ai.endpoint = trimmed.to_owned();
+    }
+    let consent = session.ai.set_consent(granted)?;
+    Ok(json!({
+        "locality": session.ai.mode.as_str(),
+        "endpoint": session.ai.endpoint,
+        "consent": consent,
+    }))
+}
+
+fn ai_rewrite(session: &mut Session, params: &Value) -> CmdResult {
+    p::require_object_or_empty(params)?;
+    let detail = p::opt_str(params, "instruction")?.unwrap_or("");
+    let proposal = session
+        .ai
+        .stage_proposal(AiMode::Rewrite, session.doc.text(), detail)?;
+    Ok(json!({ "proposal": proposal }))
+}
+
+fn ai_adjust_tone(session: &mut Session, params: &Value) -> CmdResult {
+    p::require_object_or_empty(params)?;
+    let tone = p::opt_str(params, "tone")?.unwrap_or("formal");
+    let proposal = session
+        .ai
+        .stage_proposal(AiMode::AdjustTone, session.doc.text(), tone)?;
+    Ok(json!({ "proposal": proposal }))
+}
+
+fn ai_summarize(session: &mut Session, params: &Value) -> CmdResult {
+    p::require_object_or_empty(params)?;
+    let max_sent = p::opt_u64(params, "max_sentences")?.unwrap_or(2);
+    let proposal =
+        session
+            .ai
+            .stage_proposal(AiMode::Summarize, session.doc.text(), &max_sent.to_string())?;
+    Ok(json!({ "proposal": proposal }))
+}
+
+fn ai_expand(session: &mut Session, params: &Value) -> CmdResult {
+    p::require_object_or_empty(params)?;
+    let detail = p::opt_str(params, "instruction")?.unwrap_or("");
+    let proposal = session
+        .ai
+        .stage_proposal(AiMode::Expand, session.doc.text(), detail)?;
+    Ok(json!({ "proposal": proposal }))
+}
+
+fn ai_draft(session: &mut Session, params: &Value) -> CmdResult {
+    let prompt = p::req_str(params, "prompt")?;
+    let proposal = session
+        .ai
+        .stage_proposal(AiMode::Draft, session.doc.text(), prompt)?;
+    Ok(json!({ "proposal": proposal }))
+}
+
+fn ai_apply_result(session: &mut Session, params: &Value) -> CmdResult {
+    p::require_object_or_empty(params)?;
+    let requested_id = p::opt_u64(params, "proposal_id")?;
+    let proposal = session
+        .ai
+        .pending_proposal
+        .clone()
+        .ok_or_else(|| CmdError::Disabled("no pending AI proposal".to_owned()))?;
+    if let Some(expected) = requested_id
+        && proposal.id != expected
+    {
+        return Err(CmdError::Params(format!(
+            "pending AI proposal id is {}, got {expected}",
+            proposal.id
+        )));
+    }
+    let mut candidate = session.doc.clone();
+    let stats = candidate.set_text(&proposal.proposed)?;
+    session.push_undo();
+    session.doc = candidate;
+    session.ai.pending_proposal = None;
+    session.invalidate_report();
+    Ok(json!({
+        "applied_proposal_id": proposal.id,
+        "stats": stats_json(stats),
+    }))
+}
+
+fn ai_discard_result(session: &mut Session, _params: &Value) -> CmdResult {
+    let discarded = session.ai.pending_proposal.take();
+    Ok(json!({
+        "discarded": discarded.is_some(),
+        "proposal_id": discarded.map(|p| p.id),
+    }))
+}
+
+fn similarity_check(session: &mut Session, params: &Value) -> CmdResult {
+    let directory = p::req_str(params, "directory")?;
+    let corpus = io::load_local_corpus(directory)?;
+    let report = check_local_similarity(session.doc.text(), &corpus)?;
+    session.last_similarity = Some(report.clone());
+    serde_json::to_value(&report)
+        .map_err(|e| CmdError::Failed(format!("failed to serialize similarity report: {e}")))
+}
+
+fn citations_validate(session: &mut Session, params: &Value) -> CmdResult {
+    let bibtex = p::req_str(params, "bibtex")?;
+    let entries = parse_bibtex_entries(bibtex)?;
+    let diagnostics = validate_citations(&entries);
+    session.last_citation_issues = diagnostics.clone();
+    Ok(json!({
+        "entry_count": entries.len(),
+        "issues": diagnostics,
+    }))
+}
+
+fn citations_format(session: &mut Session, params: &Value) -> CmdResult {
+    let bibtex = p::req_str(params, "bibtex")?;
+    let style_raw = p::req_str(params, "style")?;
+    let style = CitationStyle::parse(style_raw)?;
+    let entries = parse_bibtex_entries(bibtex)?;
+    let diagnostics = validate_citations(&entries);
+    let formatted = format_bibliography(&entries, style);
+    session.last_citation_issues = diagnostics.clone();
+    session.last_citations = formatted.clone();
+    Ok(json!({
+        "style": style.as_str(),
+        "formatted": formatted,
+        "issues": diagnostics,
+    }))
+}
+
 fn report_json(report: &AnalysisReport, doc_text: &str) -> Value {
     let issues: Vec<Value> = report
         .issues
@@ -661,6 +857,7 @@ fn goals_json(goals: &WritingGoals) -> Value {
         "formality": goals.formality.as_str(),
         "context": goals.context.as_str(),
         "purpose": goals.purpose.as_str(),
+        "inclusive_language": goals.inclusive_language,
     })
 }
 
@@ -670,6 +867,7 @@ fn goals_json_with_lang(goals: &WritingGoals, language: &str) -> Value {
         "formality": goals.formality.as_str(),
         "context": goals.context.as_str(),
         "purpose": goals.purpose.as_str(),
+        "inclusive_language": goals.inclusive_language,
         "language": language,
     })
 }

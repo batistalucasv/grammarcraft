@@ -36,6 +36,9 @@ impl From<CoreError> for CmdError {
             | CoreError::SnippetTooLong { .. }
             | CoreError::InvalidSnippet(_)
             | CoreError::UnknownSnippet(_)
+            | CoreError::InvalidCitation(_)
+            | CoreError::InvalidBibtex(_)
+            | CoreError::AiTextTooLong { .. }
             | CoreError::UnknownIssue(_) => CmdError::Params(error.to_string()),
             CoreError::TooManyIssues { .. }
             | CoreError::TooManySuggestions { .. }
@@ -43,6 +46,9 @@ impl From<CoreError> for CmdError {
             | CoreError::TooManyIgnoredIssues { .. }
             | CoreError::TooManyStyleRules { .. }
             | CoreError::TooManySnippets { .. }
+            | CoreError::TooManySimilarityMatches { .. }
+            | CoreError::TooManyCitations { .. }
+            | CoreError::TooManyDiffHunks { .. }
             | CoreError::IdsExhausted => CmdError::Failed(error.to_string()),
         }
     }

@@ -508,3 +508,145 @@ fn docx_save_and_open_round_trips_and_rejects_corrupted_bytes() {
 
     let _ = std::fs::remove_dir_all(&base);
 }
+
+#[test]
+fn ai_cloud_consent_blocks_without_grant_and_mock_provider_applies_with_undo() {
+    use craft_ai_core::mock::{MockProvider, Outcome, Script};
+    use craft_ai_core::{
+        CapabilityId, CapabilitySpec, InputRole, ModelId, ModelInfo, Output, Payload,
+    };
+    use std::sync::Arc;
+
+    let mut session = Session::new();
+    run(
+        &mut session,
+        "doc.set_text",
+        json!({"text": "Original draft sentence."}),
+    )
+    .expect("set text");
+
+    // Switching to cloud without granting consent must block remote execution.
+    run(
+        &mut session,
+        "ai.consent",
+        json!({"granted": false, "locality": "cloud"}),
+    )
+    .expect("set cloud unconsented");
+    let blocked = run(
+        &mut session,
+        "ai.rewrite",
+        json!({"instruction": "tighten"}),
+    )
+    .expect_err("cloud call without consent must be blocked");
+    assert!(matches!(blocked, CmdError::Disabled(m) if m.contains("consent")));
+
+    // Wire a network-free MockProvider and grant consent.
+    let model_id = ModelId::new("mock-writer").expect("valid model id");
+    let spec = CapabilitySpec::new(CapabilityId::parse("text.complete").expect("cap"))
+        .accepting(InputRole::System, 1)
+        .accepting(InputRole::Prompt, 1);
+    let provider = Arc::new(MockProvider::new(
+        vec![ModelInfo::new(model_id, "Mock Writer").with(spec)],
+        Script {
+            running_polls: 0,
+            text_chunks: Vec::new(),
+            outcome: Outcome::Succeed(vec![Output {
+                payload: Payload::text("Refined concise sentence."),
+                label: None,
+            }]),
+        },
+    ));
+    session
+        .set_cloud_provider("mock-writer", provider)
+        .expect("wire mock provider");
+    run(
+        &mut session,
+        "ai.consent",
+        json!({"granted": true, "locality": "cloud"}),
+    )
+    .expect("grant consent");
+
+    let staged =
+        run(&mut session, "ai.rewrite", json!({})).expect("consented mock rewrite succeeds");
+    assert_eq!(staged["proposal"]["proposed"], "Refined concise sentence.");
+    assert_eq!(session.doc().text(), "Original draft sentence.");
+
+    run(&mut session, "ai.applyResult", json!({})).expect("apply AI proposal");
+    assert_eq!(session.doc().text(), "Refined concise sentence.");
+
+    run(&mut session, "history.undo", json!({})).expect("undo AI proposal");
+    assert_eq!(session.doc().text(), "Original draft sentence.");
+}
+
+#[test]
+fn similarity_check_enforces_automation_roots_and_citations_format_all_styles() {
+    let base = std::env::temp_dir().join(format!("gc-engine-m4-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let read_dir = base.join("corpus");
+    let outside_dir = base.join("outside");
+    std::fs::create_dir_all(&read_dir).expect("corpus dir");
+    std::fs::create_dir_all(&outside_dir).expect("outside dir");
+    std::fs::write(
+        read_dir.join("ref.txt"),
+        "Deterministic shingle overlap detection keeps user files local and auditable.",
+    )
+    .expect("seed corpus");
+
+    let roots = AutomationRoots::new(Some(&read_dir), None)
+        .expect("roots")
+        .expect("some");
+    file_access::confine(Some(&roots), || {
+        let mut session = Session::new();
+        run(
+            &mut session,
+            "doc.set_text",
+            json!({"text": "Deterministic shingle overlap detection keeps user files local and auditable."}),
+        )
+        .expect("set text");
+
+        let blocked = run(
+            &mut session,
+            "similarity.check",
+            json!({"directory": outside_dir.to_string_lossy()}),
+        )
+        .expect_err("outside dir must be blocked");
+        assert!(matches!(blocked, CmdError::Failed(m) if m.contains("outside the read root")));
+
+        let sim = run(
+            &mut session,
+            "similarity.check",
+            json!({"directory": read_dir.to_string_lossy()}),
+        )
+        .expect("authorized similarity check");
+        assert!(sim["overall_percent"].as_u64().unwrap_or(0) >= 80);
+
+        let bib = r#"@article{rust2026, author={Ada Lovelace}, title={Rust Craft}, journal={Systems}, year={2026}}"#;
+        let val = run(&mut session, "citations.validate", json!({"bibtex": bib}))
+            .expect("validate bibtex");
+        assert_eq!(val["entry_count"], 1);
+        for style in grammarcraft_core::CitationStyle::ALL {
+            let formatted = run(
+                &mut session,
+                "citations.format",
+                json!({"bibtex": bib, "style": style.as_str()}),
+            )
+            .expect("format style");
+            assert!(
+                formatted["formatted"][0]
+                    .as_str()
+                    .is_some_and(|s| s.contains("Rust Craft"))
+            );
+        }
+    });
+
+    let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn legacy_goals_json_without_inclusive_language_deserializes_cleanly() {
+    let parsed: grammarcraft_core::WritingGoals = serde_json::from_str(
+        r#"{"audience":"general","formality":"neutral","context":"general","purpose":"inform"}"#,
+    )
+    .expect("backward compatible goals json");
+    assert!(!parsed.inclusive_language);
+}
