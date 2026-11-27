@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **M0 in progress — repository instantiated from `craft-template` (`42f4fb7`) with clean-room records initialized; `Cargo.toml` pins, `deny.toml`, and first PR gate checks pending.**
+Status: **M1 core foundation implemented on `feat/m1-rules-and-persistence` (PR #2 pending merge); `deny.toml`, Rule 4 trademark checks, `.docx` support, and M2–M5 remain open.**
 
 A milestone is done only when every checkbox is verified in a fresh clone (and on GitHub Actions where noted), never when code is merely drafted.
 
@@ -8,27 +8,28 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 
 - [x] Copy `craft-template/template/`, rename `myapp` → `grammarcraft` before first commit (`42f4fb7`), verify `cargo xtask ci` locally, and publish `batistalucasv/grammarcraft` `main`
 - [x] Initialize `clean-room/` (`README.md`, `assumptions.md`, `plan.md`, `source-log.md`), `docs/feature-names.md`, `docs/target-app-parity.md`, `docs/gaps.md`, and `docs/roadmap.md`
-- [ ] Pin single `storytold/egui` fork revision matching `craft-libs` and `rust-version = "1.95"` in root `Cargo.toml`
+- [x] Set `rust-version = "1.95"` in root `Cargo.toml` and migrate `AGENTS.md` to the `craft-agents` block (`RFC-0072`)
+- [ ] Pin single `storytold/egui` fork revision matching `craft-libs` when introducing desktop UI (`M3`)
 - [ ] Configure `deny.toml` enforcing `craft-contrib/standards/licences.md` allowlist (blocking GPL/LGPL/AGPL and NC datasets)
 - [ ] Complete USPTO, EUIPO/TMview, and WIPO Rule 4 trademark checks in `docs/feature-names.md` before first UI PR / public release
-- [ ] Confirm `gate.yml@main` and `house-rules.yml@main` pass on first PR to `main` with branch protection enabled
+- [ ] Confirm `gate.yml@main` and `house-rules.yml@main` pass together on PR with branch protection enabled on `main`
 
 ## M1 — Core domain, persistence, undo/redo & confined CLI/MCP
 
-- [x] Replace `Note` example with initial `grammarcraft-core` (`Document`, UTF-8-safe `TextSpan`, `WritingGoals`, `TextStats`, `CoreError`, `MAX_DOCUMENT_BYTES`), `grammarcraft-engine` (`Session`, `doc.set_text`, `doc.get`, `doc.clear`, `goals.set`, `stats.measure`, `hostile_parameters_never_panic`), and `grammarcraft-cli` integration tests
-- [ ] Extend `grammarcraft-core` (L0) with `Issue`, `IssueCategory`, `StyleGuide`, `Snippet`, `ReadabilityMetrics`, `WritingScore`, and `MAX_*` bounds (zero I/O / zero JSON / zero panics)
-- [ ] Implement `grammarcraft-rules` (L1) base pipeline wrapping `craft-proof` and `craft-text` with per-paragraph incremental caching and per-document ignore/dictionary isolation
-- [ ] Implement `grammarcraft-engine` (L2): `Session`, bounded undo/redo stack, versioned atomic save/open (`.grammarcraft.json`, `.txt`, `.md`, `.docx` via `craft-docx`), `AutomationRoots` file confinement
-- [ ] Register initial `doc.*`, `history.*`, `review.*`, and `goals.*` `CommandSpec` catalog with `hostile_parameters_never_panic` passing 100%
-- [ ] Ship `grammarcraft-cli` + `grammarcraft-cli mcp` (`craft-mcp-server`) refusing startup without `--automation-read-root` and `--automation-write-root`
+- [x] Replace `Note` example with `grammarcraft-core` (L0): `Document`, UTF-8-safe `TextSpan`, `WritingGoals`, `TextStats`, `IssueId`, `IssueCategory`, `Severity`, `Confidence`, `Replacement`, `Issue`, `IssueList`, `ReadabilityMetrics`, `WritingScore`, `ToneProfile`, `PersonalDictionary`, `IgnoredIssueSet`, `CoreError`, and `MAX_*` bounds (zero I/O / zero `serde_json` / zero panics)
+- [x] Implement `grammarcraft-rules` (L1) base pipeline wrapping `craft-proof` with per-paragraph incremental caching, per-document ignore/dictionary isolation, initial clarity/style rules, open readability metrics, `WritingScore`, and span-anchored `ToneProfile`
+- [x] Implement `grammarcraft-engine` (L2): `Session`, bounded undo/redo stack (`MAX_UNDO_STEPS = 200`), versioned atomic save/open (`.grammarcraft.json` v1, `.txt`, `.md` via `craft-atomic`), and `AutomationRoots` file confinement (`file_access.rs`)
+- [x] Register 14 `CommandSpec` commands (`doc.*`, `history.*`, `goals.set`, `stats.measure`, `review.*`, `dict.*`) with `hostile_parameters_never_panic` passing 100%
+- [x] Ship `grammarcraft-cli` (`check`, `stats`, `run`, `commands`) + `grammarcraft-cli mcp` refusing startup without `--automation-read-root` and `--automation-write-root`
+- [ ] Add `.docx` import/export via `craft-docx` and `craft-text` segmentation integration
 
 ## M2 — Deterministic writing & style engine
 
 - [ ] Add contextual spelling rules (homophones/paronyms in EN/PT-BR/ES) and regional variant consistency alerts (`en-US`/`en-GB`, `pt-BR`/`pt-PT`)
 - [ ] Expand deterministic grammar rules (agreement, crasis/government in PT-BR, punctuation mechanics, comma splices) without copyleft code or rules
-- [ ] Implement clarity & style analyzers: passive voice (modulated by `WritingGoals`), long/complex sentences, redundancies/pleonasms, weak adverbs, lexical repetition window, syntactic rhythm
-- [ ] Implement open readability indices (Flesch Reading Ease, Flesch-Kincaid, PT-BR/Gulpease, reading/speaking time) and transparent 0–100 `WritingScore`
-- [ ] Implement `PersonalDictionary` (`CUSTOM.DIC` UTF-16LE + UTF-8), declarative `StyleRules` (linear-time `regex`), and `SnippetCatalog` (`{{placeholder}}` expansion)
+- [ ] Expand clarity & style analyzers: full `WritingGoals` modulation across categories, vague-verb precision, syntactic rhythm, and expanded bilingual redundancy/passive tables
+- [ ] Configure `clean-room/derivation/`, `freeze.md`, and `verification.md` corpus accuracy checks plus `SARIF` CLI output
+- [ ] Implement `PersonalDictionary` (`CUSTOM.DIC` UTF-16LE + UTF-8), declarative `StyleRules` (linear-time `regex`), and `SnippetCatalog` (`{{placeholder}}` expansion) in L0/L1/L2
 
 ## M3 — Native `egui` desktop app & accessibility
 
@@ -40,7 +41,7 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 
 ## M4 — Multi-signal tone, hybrid AI assistance & local similarity
 
-- [ ] Implement deterministic multi-signal `ToneProfile` (up to 3 tones with explicit span evidence), formality checks, and opt-in inclusive language rules
+- [ ] Expand `ToneProfile` with formality-mismatch checks, treatment/convention consistency, and opt-in inclusive language rules
 - [ ] Integrate `craft-ai-client`, `craft-ai-native` (`SecretStore`, `ConsentFile`, `HistoryFile`), `craft-ai-openai` (`text.complete`), and `craft-ai-egui` with explicit `Local (Offline)` vs `Cloud` status and mandatory remote consent
 - [ ] Add local NLP/tone/GEC `ModelRunner` integration path in `craft-ai-engine-rten` / `craft-ai-engine-candle` (weights downloaded on demand with SHA-256 verification)
 - [ ] Ship `ai.rewrite`, `ai.adjustTone`, `ai.summarize`, `ai.expand`, `ai.draft` with word-level diff preview and atomic single-step undo via `ai.applyResult`
@@ -64,4 +65,5 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 | Date | Milestone | What changed |
 | --- | --- | --- |
 | 2026-11-27 | M0 | Instantiated from `craft-template` (`42f4fb7`), pushed `main` to `batistalucasv/grammarcraft`, and initialized `clean-room/` records, `docs/feature-names.md`, `docs/target-app-parity.md`, `docs/gaps.md`, and `docs/roadmap.md` |
-| 2026-11-27 | M1 | Replaced `Note` template domain with `Document`, `TextSpan`, `WritingGoals`, `TextStats`, `CoreError`, `doc.*`/`goals.set`/`stats.measure` commands, and CLI tests (`cargo xtask ci` green) |
+| 2026-11-27 | M0/M1 | PR #1 merged (`65136ca`): `Document`, `TextSpan`, `WritingGoals`, `TextStats`, `CoreError`, 5 commands, CLI tests, and `AGENTS.md` `craft-agents` migration (`RFC-0072`) |
+| 2026-11-27 | M1 | Added L0 review/metrics/glossary types, L1 `grammarcraft-rules` (`craft-proof`, incremental cache, clarity/readability/`WritingScore`/`ToneProfile`), L2 undo/redo, `craft-atomic` persistence, `AutomationRoots`, 14 `CommandSpec`s, and CLI `check` / `mcp` (`cargo xtask ci` green) |
