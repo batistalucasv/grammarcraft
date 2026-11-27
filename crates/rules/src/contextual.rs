@@ -2,7 +2,7 @@ use craft_proof::ProofLang;
 use grammarcraft_core::{Confidence, IssueCategory, Replacement, Severity};
 
 use crate::RawFinding;
-use crate::clarity::is_portuguese;
+use crate::clarity::{is_portuguese, is_spanish};
 
 struct ContextualPattern {
     needle: &'static str,
@@ -396,13 +396,276 @@ const PT_PATTERNS: &[ContextualPattern] = &[
     },
 ];
 
+const ES_PATTERNS: &[ContextualPattern] = &[
+    ContextualPattern {
+        needle: "haber si",
+        target_sub: "haber",
+        replacement: "a ver",
+        title: "Confusión haber / a ver",
+        explanation: "Use la locución `a ver` (mirar o comprobar) antes de `si`.",
+    },
+    ContextualPattern {
+        needle: "haber qué",
+        target_sub: "haber",
+        replacement: "a ver",
+        title: "Confusión haber / a ver",
+        explanation: "Use `a ver qué` para expresar expectativa o comprobación.",
+    },
+    ContextualPattern {
+        needle: "debe a ver",
+        target_sub: "a ver",
+        replacement: "haber",
+        title: "Confusión haber / a ver",
+        explanation: "Use el verbo `haber` tras `debe`.",
+    },
+    ContextualPattern {
+        needle: "puede a ver",
+        target_sub: "a ver",
+        replacement: "haber",
+        title: "Confusión haber / a ver",
+        explanation: "Use el verbo `haber` tras `puede`.",
+    },
+    ContextualPattern {
+        needle: "por hay",
+        target_sub: "hay",
+        replacement: "ahí",
+        title: "Confusión hay / ahí / ay",
+        explanation: "Use el adverbio de lugar `ahí` en la expresión `por ahí`.",
+    },
+    ContextualPattern {
+        needle: "de hay",
+        target_sub: "hay",
+        replacement: "ahí",
+        title: "Confusión hay / ahí / ay",
+        explanation: "Use el adverbio `ahí` en `de ahí`.",
+    },
+    ContextualPattern {
+        needle: "ahí que",
+        target_sub: "ahí",
+        replacement: "hay",
+        title: "Confusión hay / ahí / ay",
+        explanation: "Use la forma verbal `hay` en la perífrasis `hay que`.",
+    },
+    ContextualPattern {
+        needle: "ahí muchos",
+        target_sub: "ahí",
+        replacement: "hay",
+        title: "Confusión hay / ahí / ay",
+        explanation: "Use el verbo `hay` (haber) antes de `muchos`.",
+    },
+    ContextualPattern {
+        needle: "ahí muchas",
+        target_sub: "ahí",
+        replacement: "hay",
+        title: "Confusión hay / ahí / ay",
+        explanation: "Use el verbo `hay` (haber) antes de `muchas`.",
+    },
+    ContextualPattern {
+        needle: "¡hay!",
+        target_sub: "hay",
+        replacement: "ay",
+        title: "Confusión hay / ahí / ay",
+        explanation: "Use la interjección `ay` para expresar sorpresa o dolor.",
+    },
+    ContextualPattern {
+        needle: "ha echo",
+        target_sub: "echo",
+        replacement: "hecho",
+        title: "Confusión echo / hecho",
+        explanation: "Use el participio `hecho` (del verbo `hacer`) con el auxiliar `ha`.",
+    },
+    ContextualPattern {
+        needle: "he echo",
+        target_sub: "echo",
+        replacement: "hecho",
+        title: "Confusión echo / hecho",
+        explanation: "Use el participio `hecho` (del verbo `hacer`) con el auxiliar `he`.",
+    },
+    ContextualPattern {
+        needle: "han echo",
+        target_sub: "echo",
+        replacement: "hecho",
+        title: "Confusión echo / hecho",
+        explanation: "Use el participio `hecho` (del verbo `hacer`) con el auxiliar `han`.",
+    },
+    ContextualPattern {
+        needle: "hemos echo",
+        target_sub: "echo",
+        replacement: "hecho",
+        title: "Confusión echo / hecho",
+        explanation: "Use el participio `hecho` (del verbo `hacer`) con `hemos`.",
+    },
+    ContextualPattern {
+        needle: "fue echo",
+        target_sub: "echo",
+        replacement: "hecho",
+        title: "Confusión echo / hecho",
+        explanation: "Use el participio `hecho` tras `fue`.",
+    },
+    ContextualPattern {
+        needle: "está echo",
+        target_sub: "echo",
+        replacement: "hecho",
+        title: "Confusión echo / hecho",
+        explanation: "Use el participio `hecho` tras `está`.",
+    },
+    ContextualPattern {
+        needle: "hecho de menos",
+        target_sub: "hecho",
+        replacement: "echo",
+        title: "Confusión echo / hecho",
+        explanation: "La expresión `echar de menos` usa `echo` (sin `h`).",
+    },
+    ContextualPattern {
+        needle: "una ves",
+        target_sub: "ves",
+        replacement: "vez",
+        title: "Confusión ves / vez",
+        explanation: "Use el sustantivo `vez` en `una vez`.",
+    },
+    ContextualPattern {
+        needle: "otra ves",
+        target_sub: "ves",
+        replacement: "vez",
+        title: "Confusión ves / vez",
+        explanation: "Use el sustantivo `vez` en `otra vez`.",
+    },
+    ContextualPattern {
+        needle: "cada ves",
+        target_sub: "ves",
+        replacement: "vez",
+        title: "Confusión ves / vez",
+        explanation: "Use el sustantivo `vez` en `cada vez`.",
+    },
+    ContextualPattern {
+        needle: "tal ves",
+        target_sub: "ves",
+        replacement: "vez",
+        title: "Confusión ves / vez",
+        explanation: "Use el sustantivo `vez` en `tal vez`.",
+    },
+    ContextualPattern {
+        needle: "en ves de",
+        target_sub: "ves",
+        replacement: "vez",
+        title: "Confusión ves / vez",
+        explanation: "Use el sustantivo `vez` en `en vez de`.",
+    },
+    ContextualPattern {
+        needle: "si lo vez",
+        target_sub: "vez",
+        replacement: "ves",
+        title: "Confusión ves / vez",
+        explanation: "Use el verbo `ves` (de `ver`) tras `si lo`.",
+    },
+    ContextualPattern {
+        needle: "como vez",
+        target_sub: "vez",
+        replacement: "ves",
+        title: "Confusión ves / vez",
+        explanation: "Use el verbo `ves` (de `ver`) en `como ves`.",
+    },
+    ContextualPattern {
+        needle: "ojalá halla",
+        target_sub: "halla",
+        replacement: "haya",
+        title: "Confusión haya / halla",
+        explanation: "Use `haya` (subjuntivo de `haber`) después de `ojalá`.",
+    },
+    ContextualPattern {
+        needle: "espero que halla",
+        target_sub: "halla",
+        replacement: "haya",
+        title: "Confusión haya / halla",
+        explanation: "Use `haya` (de `haber`) en `espero que haya`.",
+    },
+    ContextualPattern {
+        needle: "aunque halla",
+        target_sub: "halla",
+        replacement: "haya",
+        title: "Confusión haya / halla",
+        explanation: "Use `haya` (de `haber`) después de `aunque`.",
+    },
+    ContextualPattern {
+        needle: "se haya en",
+        target_sub: "haya",
+        replacement: "halla",
+        title: "Confusión haya / halla",
+        explanation: "Use `halla` (del verbo `hallar`, encontrarse) en `se halla en`.",
+    },
+    ContextualPattern {
+        needle: "se haya ubicado",
+        target_sub: "haya",
+        replacement: "halla",
+        title: "Confusión haya / halla",
+        explanation: "Use `halla` (del verbo `hallar`) en `se halla ubicado`.",
+    },
+    ContextualPattern {
+        needle: "si no que",
+        target_sub: "si no",
+        replacement: "sino",
+        title: "Confusión sino / si no",
+        explanation: "Use la conjunción adversativa `sino` en `sino que`.",
+    },
+    ContextualPattern {
+        needle: "sino vienes",
+        target_sub: "sino",
+        replacement: "si no",
+        title: "Confusión sino / si no",
+        explanation: "Use `si no` (condicional + negación) antes de `vienes`.",
+    },
+    ContextualPattern {
+        needle: "sino llueve",
+        target_sub: "sino",
+        replacement: "si no",
+        title: "Confusión sino / si no",
+        explanation: "Use `si no` (condicional + negación) antes de `llueve`.",
+    },
+    ContextualPattern {
+        needle: "sino puedes",
+        target_sub: "sino",
+        replacement: "si no",
+        title: "Confusión sino / si no",
+        explanation: "Use `si no` (condicional + negación) antes de `puedes`.",
+    },
+    ContextualPattern {
+        needle: "¿porque",
+        target_sub: "porque",
+        replacement: "por qué",
+        title: "Confusión porque / por qué",
+        explanation: "En preguntas directas, use `por qué` separado y con tilde.",
+    },
+    ContextualPattern {
+        needle: "no sé porque",
+        target_sub: "porque",
+        replacement: "por qué",
+        title: "Confusión porque / por qué",
+        explanation: "En interrogativas indirectas (`no sé por qué`), use `por qué`.",
+    },
+    ContextualPattern {
+        needle: "dime porque",
+        target_sub: "porque",
+        replacement: "por qué",
+        title: "Confusión porque / por qué",
+        explanation: "En interrogativas indirectas (`dime por qué`), use `por qué`.",
+    },
+];
+
 pub(crate) fn check_paragraph(para_text: &str, lang: ProofLang) -> Vec<RawFinding> {
     let lower = para_text.to_lowercase();
     if lower.len() != para_text.len() {
         return Vec::new();
     }
     let is_pt = is_portuguese(lang);
-    let patterns = if is_pt { PT_PATTERNS } else { EN_PATTERNS };
+    let patterns = if is_pt {
+        PT_PATTERNS
+    } else if is_spanish(lang) {
+        ES_PATTERNS
+    } else if lang.is_english() {
+        EN_PATTERNS
+    } else {
+        return Vec::new();
+    };
     let mut out = Vec::new();
     for pattern in patterns {
         scan_pattern(para_text, &lower, pattern, &mut out);

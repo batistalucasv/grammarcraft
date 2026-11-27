@@ -6,8 +6,9 @@ Licensed under the MIT License or the Apache License, Version 2.0, at your optio
 
 Third-party and shared ArtCraft material
 
-This repository links `craft-proof` and `craft-atomic` from `storytold/craft-libs` at revision
-`8be80b006888ae023d61eed265241c9b78b84981` (MIT OR Apache-2.0).
+This repository links `craft-proof`, `craft-atomic`, `craft-docx`, and `craft-wordmodel` from
+`storytold/craft-libs` at revision `8be80b006888ae023d61eed265241c9b78b84981`
+(MIT OR Apache-2.0).
 
 `craft-proof` bundles the following non-code word lists and (when built with `CRAFT_I18N_DIR` set)
 build-time language data recorded in `storytold/craft-libs`'s `NOTICE` and `ATTRIBUTION.md`:

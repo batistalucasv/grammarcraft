@@ -91,6 +91,15 @@ pub(crate) fn is_portuguese(lang: ProofLang) -> bool {
             .is_some_and(|locale| locale.primary() == "pt")
 }
 
+pub(crate) fn is_spanish(lang: ProofLang) -> bool {
+    matches!(
+        lang,
+        ProofLang::Es | ProofLang::EsMx | ProofLang::Es419 | ProofLang::EsUy
+    ) || lang
+        .pack_locale()
+        .is_some_and(|locale| locale.primary() == "es")
+}
+
 fn check_redundancies(para_text: &str, is_pt: bool, out: &mut Vec<RawFinding>) {
     let lower = para_text.to_lowercase();
     if lower.len() != para_text.len() {

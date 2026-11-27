@@ -480,3 +480,31 @@ fn dict_import_and_export_respect_automation_roots_and_utf16le() {
 
     let _ = std::fs::remove_dir_all(&base);
 }
+
+#[test]
+fn docx_save_and_open_round_trips_and_rejects_corrupted_bytes() {
+    let base = std::env::temp_dir().join(format!("gc-engine-docx-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("temp dir");
+
+    let docx_path = base.join("sample.docx").to_string_lossy().into_owned();
+    let text = "First paragraph.\nSecond paragraph with café.";
+
+    let mut session = Session::new();
+    run(&mut session, "doc.set_text", json!({"text": text})).expect("set text");
+    let saved = run(&mut session, "doc.save", json!({"path": docx_path})).expect("save docx");
+    assert_eq!(saved["format"], "docx");
+
+    let mut restored = Session::new();
+    let opened = run(&mut restored, "doc.open", json!({"path": docx_path})).expect("open docx");
+    assert_eq!(opened["format"], "docx");
+    assert_eq!(restored.doc().text(), text);
+
+    let corrupt_path = base.join("corrupt.docx").to_string_lossy().into_owned();
+    std::fs::write(&corrupt_path, b"PK\x03\x04not-a-valid-docx").expect("write corrupt");
+    let err = run(&mut restored, "doc.open", json!({"path": corrupt_path}))
+        .expect_err("corrupt docx returns Params error");
+    assert!(matches!(err, CmdError::Params(_)), "{err:?}");
+
+    let _ = std::fs::remove_dir_all(&base);
+}

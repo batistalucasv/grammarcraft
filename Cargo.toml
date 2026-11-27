@@ -19,6 +19,8 @@ grammarcraft-engine = { path = "crates/engine" }
 
 craft-proof = { git = "https://github.com/storytold/craft-libs", rev = "8be80b006888ae023d61eed265241c9b78b84981" }
 craft-atomic = { git = "https://github.com/storytold/craft-libs", rev = "8be80b006888ae023d61eed265241c9b78b84981" }
+craft-docx = { git = "https://github.com/storytold/craft-libs", rev = "8be80b006888ae023d61eed265241c9b78b84981" }
+craft-wordmodel = { git = "https://github.com/storytold/craft-libs", rev = "8be80b006888ae023d61eed265241c9b78b84981" }
 
 thiserror = "2"
 regex = "1"

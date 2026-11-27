@@ -285,6 +285,67 @@ fn contextual_portuguese_rules_catch_paronyms_without_false_positives() {
 }
 
 #[test]
+fn contextual_spanish_rules_catch_errors_without_false_positives() {
+    let mut engine = AnalysisEngine::new();
+    let dict = PersonalDictionary::new();
+    let ignored = IgnoredIssueSet::new();
+    let guide = StyleGuide::new();
+
+    let mut bad = Document::new();
+    bad.set_text(
+        "Haber si vamos por hay; ya ha echo una ves eso, ojalá halla paz sino vienes. ¿Porque no?",
+    )
+    .expect("valid");
+    let report = engine
+        .analyze(
+            &bad,
+            Some("es-ES"),
+            WritingGoals::default(),
+            &dict,
+            &ignored,
+            &guide,
+        )
+        .expect("valid");
+    let replacements: Vec<&str> = report
+        .issues
+        .iter()
+        .filter(|i| i.rule_id == "contextual.confusable")
+        .filter_map(|i| i.replacements.first().map(|r| r.text.as_str()))
+        .collect();
+    assert!(replacements.contains(&"A ver"), "got {replacements:?}");
+    assert!(replacements.contains(&"ahí"), "got {replacements:?}");
+    assert!(replacements.contains(&"hecho"), "got {replacements:?}");
+    assert!(replacements.contains(&"vez"), "got {replacements:?}");
+    assert!(replacements.contains(&"haya"), "got {replacements:?}");
+    assert!(replacements.contains(&"si no"), "got {replacements:?}");
+    assert!(replacements.contains(&"Por qué"), "got {replacements:?}");
+
+    let mut good = Document::new();
+    good.set_text(
+        "A ver si vamos por ahí; ya ha hecho una vez eso, espero que haya paz si no vienes y va a haber fiesta; lo echo de menos. ¿Por qué no?",
+    )
+    .expect("valid");
+    let clean = engine
+        .analyze(
+            &good,
+            Some("es-ES"),
+            WritingGoals::default(),
+            &dict,
+            &ignored,
+            &guide,
+        )
+        .expect("valid");
+    assert!(
+        !clean
+            .issues
+            .iter()
+            .any(|i| i.rule_id.starts_with("contextual.")),
+        "unexpected Spanish contextual issue in clean text: {:?}",
+        clean.issues
+    );
+}
+
+#[test]
 fn regional_variant_mix_is_flagged_in_english_and_portuguese() {
     let mut engine = AnalysisEngine::new();
     let dict = PersonalDictionary::new();
