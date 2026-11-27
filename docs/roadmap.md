@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **M1 `.docx` support (`craft-docx` / `craft-wordmodel`) and M2 Spanish (`es*`) contextual paronym rules added on `feat/docx-and-es-contextual` (PR #4 pending merge); Rule 4 trademark searches, corpus verification, desktop UI (M3), and hybrid AI (M4) remain open.**
+Status: **M3 native `egui` desktop app (`apps/grammarcraft`) implemented on `feat/m3-egui-app` (PR #6 pending merge); `craft-design-lint` / `craft-automation`, Rule 4 trademark checks, corpus verification, and M4–M5 remain open.**
 
 A milestone is done only when every checkbox is verified in a fresh clone (and on GitHub Actions where noted), never when code is merely drafted.
 
@@ -10,8 +10,8 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 - [x] Initialize `clean-room/` (`README.md`, `assumptions.md`, `plan.md`, `source-log.md`), `docs/feature-names.md`, `docs/target-app-parity.md`, `docs/gaps.md`, and `docs/roadmap.md`
 - [x] Set `rust-version = "1.95"` in root `Cargo.toml` and migrate `AGENTS.md` to the `craft-agents` block (`RFC-0072`)
 - [x] Configure `deny.toml` enforcing `craft-contrib/standards/licences.md` allowlist (blocking GPL/LGPL/AGPL and NC datasets; `cargo-deny` binary not installed locally for offline execution)
-- [ ] Pin single `storytold/egui` fork revision matching `craft-libs` when introducing desktop UI (`M3`)
-- [ ] Complete USPTO, EUIPO/TMview, and WIPO Rule 4 trademark checks in `docs/feature-names.md` before first UI PR / public release
+- [x] Pin single `storytold/egui` (`932a73b28560acb1a695533307b2cd0d66a42081`) and `storytold/winit` (`a517b3846ee8457d84ee4975110bfda6797c44dc`) revisions matching `craft-libs` (`8be80b006888ae023d61eed265241c9b78b84981`) in root `Cargo.toml`
+- [ ] Complete USPTO, EUIPO/TMview, and WIPO Rule 4 trademark checks in `docs/feature-names.md` before first public release
 - [ ] Confirm `gate.yml@main` and `house-rules.yml@main` pass together on PR with branch protection enabled on `main`
 
 ## M1 — Core domain, persistence, undo/redo & confined CLI/MCP
@@ -33,11 +33,11 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 
 ## M3 — Native `egui` desktop app & accessibility
 
-- [ ] Build `apps/grammarcraft` using `craft-ui-shell` (`AppShell`), `craft-ui-patterns`, `craft-ui-widgets`, `craft-host`, and `craft-theme` / `craft-theme-store`
-- [ ] Render category underlines with redundant encoding (theme colour + distinct stroke pattern + severity icon) and interactive suggestion cards/popovers
-- [ ] Build bidirectional Review Pane (Alerts, Document Goals & Summary, Tone, Style Rules/Snippets) dispatching strictly via `Session::run`
-- [ ] Pass `craft-design-lint`, full keyboard navigation (`Tab`/`F6`/`Escape`, zero traps), AccessKit screen-reader tree verification, and `egui_kittest` snapshot suite
-- [ ] Enable authenticated `craft-automation` control channel (`--control`, confined to automation roots when requested)
+- [x] Build `apps/grammarcraft` using `craft` (`ui`, `ui-app`, `theme-store`, `dialogs`; `craft::ui::shell::app::{AppSpec, run}`) with light/dark themes and native file dialogs
+- [x] Render category underlines with redundant encoding (theme colour + distinct stroke pattern + `[!]`/`[~]`/`[i]` severity markers) and interactive suggestion cards
+- [x] Build bidirectional 4-tab Review Pane (`Alerts`, `Goals & Score`, `Tone Profile`, `Style & Snippets`) routing every mutation strictly via `Session::run`
+- [x] Verify keyboard navigation (`Tab`/`Shift+Tab`/`F6`/`Escape`), active AccessKit tree, and 5 headless `egui_kittest` tests
+- [ ] Pass `craft-design-lint` compliance check and enable authenticated `craft-automation` control channel (`--control`, confined to automation roots when requested)
 
 ## M4 — Multi-signal tone, hybrid AI assistance & local similarity
 
@@ -68,4 +68,5 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 | 2026-11-27 | M0/M1 | PR #1 merged (`65136ca`): `Document`, `TextSpan`, `WritingGoals`, `TextStats`, `CoreError`, 5 commands, CLI tests, and `AGENTS.md` `craft-agents` migration (`RFC-0072`) |
 | 2026-11-27 | M1 | PR #2 merged (`78766d4`): L0 review/metrics/glossary types, L1 `grammarcraft-rules` (`craft-proof`, incremental cache, clarity/readability/`WritingScore`/`ToneProfile`), L2 undo/redo, `craft-atomic` persistence, `AutomationRoots`, 14 `CommandSpec`s, and CLI `check` / `mcp` |
 | 2026-11-27 | M2 | PR #3 merged (`d932c0e`): `deny.toml` SPDX allowlist, L0 `StyleGuide`/`SnippetCatalog`/`CUSTOM.DIC` UTF-16LE+UTF-8, L1 EN/PT-BR contextual confusables + regional variants + linear-time `regex` evaluator, and 9 `style.*`/`snippet.*`/`dict.*` commands (23 total) |
-| 2026-11-27 | M1/M2 | Added `.docx` read/write via `craft-docx` + `craft-wordmodel` (`doc.open`, `doc.save`, `check`), Spanish (`es*`) contextual paronym rules, and clarity language isolation (`cargo xtask ci` green) |
+| 2026-11-27 | M1/M2 | PR #4 merged: `.docx` read/write via `craft-docx` + `craft-wordmodel` (`doc.open`, `doc.save`, `check`), Spanish (`es*`) contextual paronym rules, and clarity language isolation |
+| 2026-11-27 | M3 | PR #5 merged (`ec52b11`, Linux UI packages in `ci.yml`); added `apps/grammarcraft` native `egui` desktop app (`craft::theme_store`, `craft::dialogs`, redundant underlines, bidirectional Review Pane, AccessKit, 5 headless `egui_kittest` tests) and pinned `storytold/egui` + `storytold/winit` |

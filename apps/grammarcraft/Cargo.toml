@@ -1,0 +1,26 @@
+[package]
+name = "grammarcraft"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish = false
+description = "GrammarCraft native egui desktop app powered by the Craft design system"
+
+[lints]
+workspace = true
+
+[dependencies]
+grammarcraft-core = { workspace = true }
+grammarcraft-rules = { workspace = true }
+grammarcraft-engine = { workspace = true }
+craft = { workspace = true, features = ["ui", "ui-app", "theme-store", "dialogs"] }
+egui = { workspace = true, features = ["default_fonts"] }
+eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "wayland", "x11"] }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+egui = { workspace = true, features = ["default_fonts"] }
+egui_kittest = { workspace = true, features = ["eframe"] }
+craft = { workspace = true, features = ["ui-testing"] }

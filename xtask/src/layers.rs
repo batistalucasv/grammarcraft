@@ -34,6 +34,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("core", Class::Layer(0)),
     ("rules", Class::Layer(1)),
     ("engine", Class::Layer(2)),
+    ("grammarcraft", Class::Exempt),
     ("cli", Class::Exempt),
     ("xtask", Class::Exempt),
 ];
