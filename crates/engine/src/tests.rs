@@ -49,6 +49,15 @@ fn the_registry_reports_every_command() {
         "review.dismiss",
         "dict.add",
         "dict.remove",
+        "dict.import",
+        "dict.export",
+        "style.add_rule",
+        "style.remove_rule",
+        "style.list",
+        "snippet.add",
+        "snippet.remove",
+        "snippet.expand",
+        "snippet.list",
     ] {
         assert!(ids.contains(&expected), "missing `{expected}` in {ids:?}");
     }
@@ -323,6 +332,8 @@ fn hostile_parameters_never_panic() {
         json!({"issue_id": u64::MAX}),
         json!({"issue_id": 1e300}),
         json!({"audience": 123}),
+        json!({"id": "r1", "kind": "pattern", "pattern": "[unclosed", "rationale": "x"}),
+        json!({"prefix": "/greet", "values": 123}),
         json!({"unknown": {"nested": [true, null]}}),
     ];
     for spec in registry().all() {
@@ -331,4 +342,141 @@ fn hostile_parameters_never_panic() {
             let _ = session.run(spec.id, params);
         }
     }
+}
+
+#[test]
+fn style_guide_and_snippet_commands_round_trip_with_undo() {
+    let mut session = Session::new();
+    run(
+        &mut session,
+        "doc.set_text",
+        json!({"text": "We utilize grammarcraft today."}),
+    )
+    .expect("set text");
+
+    run(
+        &mut session,
+        "style.add_rule",
+        json!({
+            "id": "prefer-use",
+            "kind": "preferred_term",
+            "discouraged": "utilize",
+            "preferred": "use",
+            "rationale": "Keep wording direct."
+        }),
+    )
+    .expect("add preferred_term");
+    run(
+        &mut session,
+        "style.add_rule",
+        json!({
+            "id": "brand-case",
+            "kind": "brand_casing",
+            "exact": "GrammarCraft",
+            "rationale": "Use official casing."
+        }),
+    )
+    .expect("add brand_casing");
+    let listed = run(&mut session, "style.list", json!({})).expect("list");
+    assert_eq!(listed["count"], 2);
+
+    let report = run(&mut session, "review.check", json!({})).expect("check");
+    let style_issues: Vec<_> = report["issues"]
+        .as_array()
+        .expect("issues")
+        .iter()
+        .filter(|i| i["category"] == "style_guide")
+        .collect();
+    assert_eq!(style_issues.len(), 2);
+
+    // Invalid pattern rule fails with Params and leaves guide intact.
+    let err = run(
+        &mut session,
+        "style.add_rule",
+        json!({"id": "bad", "kind": "pattern", "pattern": "(unclosed", "rationale": "x"}),
+    )
+    .expect_err("invalid regex");
+    assert!(matches!(err, CmdError::Params(_)));
+
+    run(
+        &mut session,
+        "style.remove_rule",
+        json!({"id": "brand-case"}),
+    )
+    .expect("remove");
+    assert_eq!(session.style_guide().len(), 1);
+    run(&mut session, "history.undo", json!({})).expect("undo removal");
+    assert_eq!(session.style_guide().len(), 2);
+
+    run(
+        &mut session,
+        "snippet.add",
+        json!({"prefix": "/sig", "title": "Signature", "body": "Regards, {{name}}"}),
+    )
+    .expect("add snippet");
+    let expanded = run(
+        &mut session,
+        "snippet.expand",
+        json!({"prefix": "/sig", "values": {"name": "Ana"}}),
+    )
+    .expect("expand");
+    assert_eq!(expanded["text"], "Regards, Ana");
+    assert_eq!(
+        run(&mut session, "snippet.list", json!({})).expect("list")["count"],
+        1
+    );
+    run(&mut session, "snippet.remove", json!({"prefix": "/sig"})).expect("remove");
+    assert!(session.snippets().is_empty());
+}
+
+#[test]
+fn dict_import_and_export_respect_automation_roots_and_utf16le() {
+    let base = std::env::temp_dir().join(format!("gc-engine-dic-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let read_dir = base.join("read");
+    let write_dir = base.join("write");
+    let outside_dir = base.join("outside");
+    std::fs::create_dir_all(&read_dir).expect("read");
+    std::fs::create_dir_all(&write_dir).expect("write");
+    std::fs::create_dir_all(&outside_dir).expect("outside");
+
+    let mut seed = grammarcraft_core::PersonalDictionary::new();
+    seed.add_with_case("ArtCraft", true).expect("seed");
+    let dic_in = read_dir.join("CUSTOM.DIC");
+    std::fs::write(&dic_in, seed.to_custom_dic_utf16le()).expect("write seed");
+
+    let roots = AutomationRoots::new(Some(&read_dir), Some(&write_dir))
+        .expect("roots")
+        .expect("some");
+    file_access::confine(Some(&roots), || {
+        let mut session = Session::new();
+        run(
+            &mut session,
+            "dict.import",
+            json!({"path": dic_in.to_string_lossy()}),
+        )
+        .expect("import inside read root");
+        assert!(session.personal_dict().contains("ArtCraft"));
+        assert!(!session.personal_dict().contains("artcraft"));
+
+        let out_file = write_dir.join("OUT.DIC");
+        let exported = run(
+            &mut session,
+            "dict.export",
+            json!({"path": out_file.to_string_lossy(), "encoding": "utf16le"}),
+        )
+        .expect("export inside write root");
+        assert_eq!(exported["encoding"], "utf16le");
+
+        let outside_file = outside_dir.join("BAD.DIC");
+        let err = run(
+            &mut session,
+            "dict.export",
+            json!({"path": outside_file.to_string_lossy()}),
+        )
+        .expect_err("outside write root blocked");
+        assert!(matches!(err, CmdError::Failed(m) if m.contains("outside the write root")));
+    });
+
+    let _ = std::fs::remove_dir_all(&base);
 }

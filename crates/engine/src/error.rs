@@ -30,11 +30,19 @@ impl From<CoreError> for CmdError {
             | CoreError::EmptyTerm
             | CoreError::TermTooLong { .. }
             | CoreError::InvalidTerm(_)
+            | CoreError::InvalidCustomDictionary(_)
+            | CoreError::RulePatternTooLong { .. }
+            | CoreError::InvalidStyleRule(_)
+            | CoreError::SnippetTooLong { .. }
+            | CoreError::InvalidSnippet(_)
+            | CoreError::UnknownSnippet(_)
             | CoreError::UnknownIssue(_) => CmdError::Params(error.to_string()),
             CoreError::TooManyIssues { .. }
             | CoreError::TooManySuggestions { .. }
             | CoreError::TooManyCustomWords { .. }
             | CoreError::TooManyIgnoredIssues { .. }
+            | CoreError::TooManyStyleRules { .. }
+            | CoreError::TooManySnippets { .. }
             | CoreError::IdsExhausted => CmdError::Failed(error.to_string()),
         }
     }

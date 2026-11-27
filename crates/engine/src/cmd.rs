@@ -1,13 +1,13 @@
 //! The command registry.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::OnceLock;
 
 use grammarcraft_core::{
-    Audience, Context, CoreError, Formality, IgnoredIssueKey, Issue, IssueId, Purpose, TextStats,
-    WritingGoals,
+    Audience, Context, CoreError, Formality, IgnoredIssueKey, Issue, IssueId, Purpose, StyleRule,
+    StyleRuleKind, TextStats, WritingGoals,
 };
-use grammarcraft_rules::AnalysisReport;
+use grammarcraft_rules::{AnalysisReport, validate_style_rule};
 use serde_json::{Value, json};
 
 use crate::{CmdError, CmdResult, Session, io};
@@ -162,9 +162,31 @@ fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("review.dismiss", "Dismiss Issue", "Review › Proofing", review_dismiss)
             .params(r#"{"issue_id": number}"#),
         CommandSpec::new("dict.add", "Add to Dictionary", "Review › Dictionary", dict_add)
-            .params(r#"{"word": string}"#),
+            .params(r#"{"word": string, "case_sensitive"?: boolean}"#),
         CommandSpec::new("dict.remove", "Remove from Dictionary", "Review › Dictionary", dict_remove)
             .params(r#"{"word": string}"#),
+        CommandSpec::new("dict.import", "Import Custom Dictionary", "Review › Dictionary", dict_import)
+            .params(r#"{"path": string}"#),
+        CommandSpec::new("dict.export", "Export Custom Dictionary", "Review › Dictionary", dict_export)
+            .params(r#"{"path": string, "encoding"?: "utf8"|"utf16le"}"#)
+            .pure(),
+        CommandSpec::new("style.add_rule", "Add Style Rule", "Style Guide › Rules", style_add_rule)
+            .params(r#"{"id": string, "kind": "preferred_term"|"brand_casing"|"pattern", ...}"#),
+        CommandSpec::new("style.remove_rule", "Remove Style Rule", "Style Guide › Rules", style_remove_rule)
+            .params(r#"{"id": string}"#),
+        CommandSpec::new("style.list", "List Style Rules", "Style Guide › Rules", style_list)
+            .params("{}")
+            .pure(),
+        CommandSpec::new("snippet.add", "Add Snippet", "Snippets › Library", snippet_add)
+            .params(r#"{"prefix": string, "title": string, "body": string}"#),
+        CommandSpec::new("snippet.remove", "Remove Snippet", "Snippets › Library", snippet_remove)
+            .params(r#"{"prefix": string}"#),
+        CommandSpec::new("snippet.expand", "Expand Snippet", "Snippets › Library", snippet_expand)
+            .params(r#"{"prefix": string, "values"?: object}"#)
+            .pure(),
+        CommandSpec::new("snippet.list", "List Snippets", "Snippets › Library", snippet_list)
+            .params("{}")
+            .pure(),
     ]
 }
 
@@ -186,6 +208,8 @@ fn doc_get(session: &mut Session, _params: &Value) -> CmdResult {
         "stats": stats_json(session.doc().stats()),
         "undo_depth": session.undo_len(),
         "redo_depth": session.redo_len(),
+        "style_rules": session.style_guide().len(),
+        "snippets": session.snippets().len(),
     }))
 }
 
@@ -204,6 +228,8 @@ fn doc_save(session: &mut Session, params: &Value) -> CmdResult {
         &session.language_tag,
         session.goals,
         &session.personal_dict,
+        &session.style_guide,
+        &session.snippets,
     )?;
     Ok(json!({ "path": path, "format": format, "bytes": session.doc.len_bytes() }))
 }
@@ -216,6 +242,8 @@ fn doc_open(session: &mut Session, params: &Value) -> CmdResult {
     session.language_tag = loaded.language;
     session.goals = loaded.goals;
     session.personal_dict = loaded.personal_dict;
+    session.style_guide = loaded.style_guide;
+    session.snippets = loaded.snippets;
     session.ignored.clear();
     session.invalidate_report();
     Ok(json!({
@@ -373,13 +401,15 @@ fn review_dismiss(session: &mut Session, params: &Value) -> CmdResult {
 
 fn dict_add(session: &mut Session, params: &Value) -> CmdResult {
     let word = p::req_str(params, "word")?;
+    let case_sensitive = p::opt_bool(params, "case_sensitive")?.unwrap_or(false);
     let mut candidate = session.personal_dict.clone();
-    let added = candidate.add(word)?;
+    let added = candidate.add_with_case(word, case_sensitive)?;
     session.push_undo();
     session.personal_dict = candidate;
     session.invalidate_report();
     Ok(json!({
         "word": word.trim(),
+        "case_sensitive": case_sensitive,
         "added": added,
         "count": session.personal_dict.len(),
     }))
@@ -398,6 +428,184 @@ fn dict_remove(session: &mut Session, params: &Value) -> CmdResult {
         "word": word.trim(),
         "removed": removed,
         "count": session.personal_dict.len(),
+    }))
+}
+
+fn dict_import(session: &mut Session, params: &Value) -> CmdResult {
+    let path = p::req_str(params, "path")?;
+    let imported = io::import_custom_dictionary(path)?;
+    let mut candidate = session.personal_dict.clone();
+    let added = candidate.merge(&imported)?;
+    session.push_undo();
+    session.personal_dict = candidate;
+    session.invalidate_report();
+    Ok(json!({
+        "path": path,
+        "imported": imported.len(),
+        "added": added,
+        "count": session.personal_dict.len(),
+    }))
+}
+
+fn dict_export(session: &mut Session, params: &Value) -> CmdResult {
+    let path = p::req_str(params, "path")?;
+    let encoding = p::opt_str(params, "encoding")?.unwrap_or("utf8");
+    let utf16le = match encoding {
+        "utf8" | "utf-8" => false,
+        "utf16le" | "utf-16le" => true,
+        other => {
+            return Err(CmdError::Params(format!(
+                "unsupported `encoding` `{other}` (expected `utf8` or `utf16le`)"
+            )));
+        }
+    };
+    let bytes = io::export_custom_dictionary(path, &session.personal_dict, utf16le)?;
+    Ok(json!({
+        "path": path,
+        "encoding": if utf16le { "utf16le" } else { "utf8" },
+        "bytes": bytes,
+        "count": session.personal_dict.len(),
+    }))
+}
+
+fn style_add_rule(session: &mut Session, params: &Value) -> CmdResult {
+    let id = p::req_str(params, "id")?;
+    let kind_tag = p::req_str(params, "kind")?;
+    let kind = parse_style_kind(kind_tag, params)?;
+    let rule = StyleRule::new(id, kind)?;
+    validate_style_rule(&rule)?;
+
+    let mut candidate = session.style_guide.clone();
+    let added = candidate.add_rule(rule)?;
+    if added {
+        session.push_undo();
+        session.style_guide = candidate;
+        session.invalidate_report();
+    }
+    Ok(json!({
+        "id": id.trim(),
+        "added": added,
+        "count": session.style_guide.len(),
+    }))
+}
+
+fn parse_style_kind(kind_tag: &str, params: &Value) -> Result<StyleRuleKind, CmdError> {
+    match kind_tag {
+        "preferred_term" => Ok(StyleRuleKind::PreferredTerm {
+            discouraged: p::req_str(params, "discouraged")?.to_owned(),
+            preferred: p::req_str(params, "preferred")?.to_owned(),
+            rationale: p::req_str(params, "rationale")?.to_owned(),
+        }),
+        "brand_casing" => Ok(StyleRuleKind::BrandCasing {
+            exact: p::req_str(params, "exact")?.to_owned(),
+            rationale: p::req_str(params, "rationale")?.to_owned(),
+        }),
+        "pattern" => Ok(StyleRuleKind::PatternRule {
+            pattern: p::req_str(params, "pattern")?.to_owned(),
+            replacement: p::opt_str(params, "replacement")?.map(ToOwned::to_owned),
+            rationale: p::req_str(params, "rationale")?.to_owned(),
+        }),
+        other => Err(CmdError::Params(format!(
+            "unsupported `kind` `{other}` (expected `preferred_term`, `brand_casing`, or `pattern`)"
+        ))),
+    }
+}
+
+fn style_remove_rule(session: &mut Session, params: &Value) -> CmdResult {
+    let id = p::req_str(params, "id")?;
+    let mut candidate = session.style_guide.clone();
+    let removed = candidate.remove_rule(id)?;
+    if removed {
+        session.push_undo();
+        session.style_guide = candidate;
+        session.invalidate_report();
+    }
+    Ok(json!({
+        "id": id.trim(),
+        "removed": removed,
+        "count": session.style_guide.len(),
+    }))
+}
+
+fn style_list(session: &mut Session, _params: &Value) -> CmdResult {
+    let rules = serde_json::to_value(session.style_guide().rules())
+        .map_err(|e| CmdError::Failed(format!("failed to serialize style rules: {e}")))?;
+    Ok(json!({
+        "rules": rules,
+        "count": session.style_guide().len(),
+    }))
+}
+
+fn snippet_add(session: &mut Session, params: &Value) -> CmdResult {
+    let prefix = p::req_str(params, "prefix")?;
+    let title = p::req_str(params, "title")?;
+    let body = p::req_str(params, "body")?;
+    let mut candidate = session.snippets.clone();
+    let added = candidate.add(prefix, title, body)?;
+    if added {
+        session.push_undo();
+        session.snippets = candidate;
+    }
+    Ok(json!({
+        "prefix": prefix.trim().to_ascii_lowercase(),
+        "added": added,
+        "count": session.snippets.len(),
+    }))
+}
+
+fn snippet_remove(session: &mut Session, params: &Value) -> CmdResult {
+    let prefix = p::req_str(params, "prefix")?;
+    let mut candidate = session.snippets.clone();
+    let removed = candidate.remove(prefix)?;
+    if removed {
+        session.push_undo();
+        session.snippets = candidate;
+    }
+    Ok(json!({
+        "prefix": prefix.trim().to_ascii_lowercase(),
+        "removed": removed,
+        "count": session.snippets.len(),
+    }))
+}
+
+fn snippet_expand(session: &mut Session, params: &Value) -> CmdResult {
+    let prefix = p::req_str(params, "prefix")?;
+    let values = parse_string_map(params, "values")?;
+    let expanded = session.snippets().expand(prefix, &values)?;
+    Ok(json!({
+        "prefix": prefix.trim().to_ascii_lowercase(),
+        "text": expanded,
+    }))
+}
+
+fn parse_string_map(params: &Value, key: &str) -> Result<BTreeMap<String, String>, CmdError> {
+    let Some(raw) = params.get(key) else {
+        return Ok(BTreeMap::new());
+    };
+    if raw.is_null() {
+        return Ok(BTreeMap::new());
+    }
+    let Some(obj) = raw.as_object() else {
+        return Err(CmdError::Params(format!(
+            "`{key}` must be a JSON object mapping placeholder names to strings"
+        )));
+    };
+    let mut map = BTreeMap::new();
+    for (k, v) in obj {
+        let Some(val_str) = v.as_str() else {
+            return Err(CmdError::Params(format!("`{key}.{k}` must be a string")));
+        };
+        map.insert(k.clone(), val_str.to_owned());
+    }
+    Ok(map)
+}
+
+fn snippet_list(session: &mut Session, _params: &Value) -> CmdResult {
+    let snippets = serde_json::to_value(session.snippets().list())
+        .map_err(|e| CmdError::Failed(format!("failed to serialize snippets: {e}")))?;
+    Ok(json!({
+        "snippets": snippets,
+        "count": session.snippets().len(),
     }))
 }
 
@@ -504,6 +712,18 @@ pub mod p {
         raw.as_str()
             .map(Some)
             .ok_or_else(|| CmdError::Params(format!("`{key}` must be a string")))
+    }
+
+    pub fn opt_bool(value: &Value, key: &str) -> Result<Option<bool>, CmdError> {
+        let Some(raw) = value.get(key) else {
+            return Ok(None);
+        };
+        if raw.is_null() {
+            return Ok(None);
+        }
+        raw.as_bool()
+            .map(Some)
+            .ok_or_else(|| CmdError::Params(format!("`{key}` must be a boolean")))
     }
 
     pub fn u64(value: &Value, key: &str) -> Option<u64> {

@@ -1,9 +1,9 @@
 use grammarcraft_core::{
     Audience, Context, Document, IgnoredIssueKey, IgnoredIssueSet, IssueCategory,
-    PersonalDictionary, ToneSignalKind, WritingGoals,
+    PersonalDictionary, StyleGuide, StyleRule, StyleRuleKind, ToneSignalKind, WritingGoals,
 };
 
-use crate::AnalysisEngine;
+use crate::{AnalysisEngine, validate_style_rule};
 
 #[test]
 fn detects_english_spelling_redundancy_and_passive_voice() {
@@ -18,6 +18,7 @@ fn detects_english_spelling_redundancy_and_passive_voice() {
             WritingGoals::default(),
             &PersonalDictionary::new(),
             &IgnoredIssueSet::new(),
+            &StyleGuide::new(),
         )
         .expect("analysis succeeds");
 
@@ -25,26 +26,20 @@ fn detects_english_spelling_redundancy_and_passive_voice() {
         report
             .issues
             .iter()
-            .any(|i| i.rule_id == "proof.spelling" && i.span.slice(doc.text()).ok() == Some("Teh")),
-        "expected spelling issue in {:?}",
-        report.issues
+            .any(|i| i.rule_id == "proof.spelling" && i.span.slice(doc.text()).ok() == Some("Teh"))
     );
     assert!(
         report
             .issues
             .iter()
-            .any(|i| i.rule_id == "clarity.passive_voice"),
-        "expected passive voice issue in {:?}",
-        report.issues
+            .any(|i| i.rule_id == "clarity.passive_voice")
     );
     assert!(
         report
             .issues
             .iter()
             .any(|i| i.rule_id == "clarity.redundancy"
-                && i.replacements.first().map(|r| r.text.as_str()) == Some("to")),
-        "expected redundancy replacement in {:?}",
-        report.issues
+                && i.replacements.first().map(|r| r.text.as_str()) == Some("to"))
     );
     assert!(report.score.score < 100);
     assert!(report.readability.reading_minutes > 0.0);
@@ -58,6 +53,7 @@ fn academic_specialized_goals_suppress_passive_voice_and_invalidate_cache() {
     let mut engine = AnalysisEngine::new();
     let dict = PersonalDictionary::new();
     let ignored = IgnoredIssueSet::new();
+    let guide = StyleGuide::new();
 
     let default_report = engine
         .analyze(
@@ -66,6 +62,7 @@ fn academic_specialized_goals_suppress_passive_voice_and_invalidate_cache() {
             WritingGoals::default(),
             &dict,
             &ignored,
+            &guide,
         )
         .expect("valid");
     assert_eq!(engine.cache_misses(), 1);
@@ -76,7 +73,6 @@ fn academic_specialized_goals_suppress_passive_voice_and_invalidate_cache() {
             .any(|i| i.rule_id == "clarity.passive_voice")
     );
 
-    // Identical call hits the incremental paragraph cache.
     let _ = engine
         .analyze(
             &doc,
@@ -84,18 +80,18 @@ fn academic_specialized_goals_suppress_passive_voice_and_invalidate_cache() {
             WritingGoals::default(),
             &dict,
             &ignored,
+            &guide,
         )
         .expect("valid");
     assert_eq!(engine.cache_hits(), 1);
 
-    // Changing goals invalidates the paragraph cache key and suppresses passive voice.
     let academic_goals = WritingGoals {
         audience: Audience::Specialized,
         context: Context::Academic,
         ..WritingGoals::default()
     };
     let academic_report = engine
-        .analyze(&doc, Some("en-US"), academic_goals, &dict, &ignored)
+        .analyze(&doc, Some("en-US"), academic_goals, &dict, &ignored, &guide)
         .expect("valid");
     assert_eq!(engine.cache_misses(), 2);
     assert!(
@@ -119,6 +115,7 @@ fn portuguese_redundancy_passive_and_repetition_work() {
             WritingGoals::default(),
             &PersonalDictionary::new(),
             &IgnoredIssueSet::new(),
+            &StyleGuide::new(),
         )
         .expect("valid");
 
@@ -160,19 +157,246 @@ fn personal_dictionary_and_ignored_set_stay_document_scoped() {
             WritingGoals::default(),
             &dict,
             &ignored,
+            &StyleGuide::new(),
         )
         .expect("valid");
-    assert!(
-        !report.issues.iter().any(|i| i.rule_id == "proof.spelling"),
-        "personal dictionary must suppress Xylophonia"
-    );
+    assert!(!report.issues.iter().any(|i| i.rule_id == "proof.spelling"));
     assert!(
         !report
             .issues
             .iter()
-            .any(|i| i.rule_id == "clarity.redundancy"),
-        "ignored issue set must suppress dismissed redundancy"
+            .any(|i| i.rule_id == "clarity.redundancy")
     );
+}
+
+#[test]
+fn contextual_english_rules_catch_errors_without_false_positives() {
+    let mut engine = AnalysisEngine::new();
+    let dict = PersonalDictionary::new();
+    let ignored = IgnoredIssueSet::new();
+    let guide = StyleGuide::new();
+
+    let mut bad = Document::new();
+    bad.set_text("Their is a way better then that, and your welcome.")
+        .expect("valid");
+    let report = engine
+        .analyze(
+            &bad,
+            Some("en-US"),
+            WritingGoals::default(),
+            &dict,
+            &ignored,
+            &guide,
+        )
+        .expect("valid");
+    let contextual: Vec<_> = report
+        .issues
+        .iter()
+        .filter(|i| i.rule_id == "contextual.confusable")
+        .collect();
+    assert_eq!(contextual.len(), 3, "got {contextual:?}");
+
+    let mut good = Document::new();
+    good.set_text("There is a way better than that, and you're welcome.")
+        .expect("valid");
+    let clean = engine
+        .analyze(
+            &good,
+            Some("en-US"),
+            WritingGoals::default(),
+            &dict,
+            &ignored,
+            &guide,
+        )
+        .expect("valid");
+    assert!(
+        !clean
+            .issues
+            .iter()
+            .any(|i| i.rule_id.starts_with("contextual.")),
+        "unexpected contextual issue in clean text: {:?}",
+        clean.issues
+    );
+}
+
+#[test]
+fn contextual_portuguese_rules_catch_paronyms_without_false_positives() {
+    let mut engine = AnalysisEngine::new();
+    let dict = PersonalDictionary::new();
+    let ignored = IgnoredIssueSet::new();
+    let guide = StyleGuide::new();
+
+    let mut bad = Document::new();
+    bad.set_text("Ele chegou a anos com mal humor e perguntou porque?")
+        .expect("valid");
+    let report = engine
+        .analyze(
+            &bad,
+            Some("pt-BR"),
+            WritingGoals::default(),
+            &dict,
+            &ignored,
+            &guide,
+        )
+        .expect("valid");
+    assert!(
+        report
+            .issues
+            .iter()
+            .any(|i| i.rule_id == "contextual.confusable"
+                && i.replacements.first().map(|r| r.text.as_str()) == Some("há"))
+    );
+    assert!(
+        report
+            .issues
+            .iter()
+            .any(|i| i.rule_id == "contextual.confusable"
+                && i.replacements.first().map(|r| r.text.as_str()) == Some("mau"))
+    );
+    assert!(
+        report
+            .issues
+            .iter()
+            .any(|i| i.rule_id == "contextual.por_que"
+                && i.replacements.first().map(|r| r.text.as_str()) == Some("por quê"))
+    );
+
+    let mut good = Document::new();
+    good.set_text("Ele chegou há anos com mau humor e explicou o porquê.")
+        .expect("valid");
+    let clean = engine
+        .analyze(
+            &good,
+            Some("pt-BR"),
+            WritingGoals::default(),
+            &dict,
+            &ignored,
+            &guide,
+        )
+        .expect("valid");
+    assert!(
+        !clean
+            .issues
+            .iter()
+            .any(|i| i.rule_id.starts_with("contextual.")),
+        "unexpected contextual issue: {:?}",
+        clean.issues
+    );
+}
+
+#[test]
+fn regional_variant_mix_is_flagged_in_english_and_portuguese() {
+    let mut engine = AnalysisEngine::new();
+    let dict = PersonalDictionary::new();
+    let ignored = IgnoredIssueSet::new();
+    let guide = StyleGuide::new();
+
+    let mut en_doc = Document::new();
+    en_doc
+        .set_text("The color and the colour must match.")
+        .expect("valid");
+    let en_report = engine
+        .analyze(
+            &en_doc,
+            Some("en-US"),
+            WritingGoals::default(),
+            &dict,
+            &ignored,
+            &guide,
+        )
+        .expect("valid");
+    assert!(
+        en_report
+            .issues
+            .iter()
+            .any(|i| i.rule_id == "variants.en_us"
+                && i.replacements.first().map(|r| r.text.as_str()) == Some("color"))
+    );
+
+    let mut pt_doc = Document::new();
+    pt_doc
+        .set_text("O facto foi um ótimo projeto para a equipa.")
+        .expect("valid");
+    let pt_report = engine
+        .analyze(
+            &pt_doc,
+            Some("pt-BR"),
+            WritingGoals::default(),
+            &dict,
+            &ignored,
+            &guide,
+        )
+        .expect("valid");
+    assert!(
+        pt_report
+            .issues
+            .iter()
+            .any(|i| i.rule_id == "variants.pt_br"
+                && i.replacements.first().map(|r| r.text.as_str()) == Some("fato"))
+    );
+}
+
+#[test]
+fn style_guide_rules_evaluate_and_reject_invalid_regex() {
+    let invalid = StyleRule::new(
+        "bad-regex",
+        StyleRuleKind::PatternRule {
+            pattern: "[unclosed".into(),
+            replacement: None,
+            rationale: "broken".into(),
+        },
+    )
+    .expect("syntactic fields valid");
+    assert!(validate_style_rule(&invalid).is_err());
+
+    let mut guide = StyleGuide::new();
+    guide
+        .add_rule(
+            StyleRule::new(
+                "prefer-use",
+                StyleRuleKind::PreferredTerm {
+                    discouraged: "utilize".into(),
+                    preferred: "use".into(),
+                    rationale: "Prefer plain wording.".into(),
+                },
+            )
+            .expect("valid"),
+        )
+        .expect("added");
+    guide
+        .add_rule(
+            StyleRule::new(
+                "brand-case",
+                StyleRuleKind::BrandCasing {
+                    exact: "GrammarCraft".into(),
+                    rationale: "Use official capitalization.".into(),
+                },
+            )
+            .expect("valid"),
+        )
+        .expect("added");
+
+    let mut doc = Document::new();
+    doc.set_text("Teams utilize grammarcraft daily.")
+        .expect("valid");
+    let mut engine = AnalysisEngine::new();
+    let report = engine
+        .analyze(
+            &doc,
+            Some("en-US"),
+            WritingGoals::default(),
+            &PersonalDictionary::new(),
+            &IgnoredIssueSet::new(),
+            &guide,
+        )
+        .expect("valid");
+
+    let style_issues: Vec<_> = report
+        .issues
+        .iter()
+        .filter(|i| i.category == IssueCategory::StyleGuide)
+        .collect();
+    assert_eq!(style_issues.len(), 2, "got {style_issues:?}");
 }
 
 #[test]
@@ -188,6 +412,7 @@ fn tone_profile_anchors_evidence_spans() {
             WritingGoals::default(),
             &PersonalDictionary::new(),
             &IgnoredIssueSet::new(),
+            &StyleGuide::new(),
         )
         .expect("valid");
 

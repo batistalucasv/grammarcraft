@@ -35,8 +35,24 @@ pub enum CoreError {
     InvalidTerm(String),
     #[error("personal dictionary holds at most {max} words")]
     TooManyCustomWords { max: usize },
+    #[error("invalid custom dictionary file: {0}")]
+    InvalidCustomDictionary(String),
     #[error("ignored issue list holds at most {max} entries")]
     TooManyIgnoredIssues { max: usize },
+    #[error("style guide holds at most {max} rules")]
+    TooManyStyleRules { max: usize },
+    #[error("style rule field is longer than {max} bytes")]
+    RulePatternTooLong { max: usize },
+    #[error("invalid style rule: {0}")]
+    InvalidStyleRule(String),
+    #[error("snippet catalog holds at most {max} snippets")]
+    TooManySnippets { max: usize },
+    #[error("snippet body is longer than {max} bytes")]
+    SnippetTooLong { max: usize },
+    #[error("invalid snippet: {0}")]
+    InvalidSnippet(String),
+    #[error("unknown snippet `{0}`")]
+    UnknownSnippet(String),
     #[error("there is no issue with id {0}")]
     UnknownIssue(IssueId),
     #[error("issue ids are exhausted")]
