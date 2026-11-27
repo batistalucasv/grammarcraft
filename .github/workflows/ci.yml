@@ -22,7 +22,9 @@ jobs:
     uses: storytold/craft-common-actions/.github/workflows/gate.yml@main
     with:
       command: "cargo xtask ci"
-      # This template has no fonts, no wasm target and no Linux system libraries to install.
+      # Native egui/eframe Linux dependencies for the desktop app and headless UI tests.
       craft-fonts-ref: ""
       targets: ""
-      packages: ""
+      packages: >-
+        pkg-config libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxrandr-dev libxi-dev
+        libgtk-3-dev libfontconfig1-dev libfreetype-dev mesa-vulkan-drivers
