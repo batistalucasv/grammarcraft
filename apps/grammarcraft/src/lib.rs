@@ -11,6 +11,7 @@
     clippy::unreachable
 )]
 
+pub mod control;
 pub mod editor;
 pub mod sidebar;
 pub mod state;
@@ -23,8 +24,11 @@ mod tests;
 pub use state::{FileAction, GrammarCraftApp, PaneFocusTarget, SidebarTab};
 pub use theme_bridge::ThemeMode;
 
+use craft::automation::control::ControlChannel;
 use craft::behavior::placement::Defaults;
+use craft::ui::runtime::windows::WindowHost;
 use craft::ui::shell::app::{AppSpec, run};
+use serde_json::json;
 
 pub fn app_spec() -> AppSpec {
     AppSpec::new(
@@ -35,5 +39,32 @@ pub fn app_spec() -> AppSpec {
 }
 
 pub fn run_desktop() -> eframe::Result {
-    run(app_spec(), |_ctx| GrammarCraftApp::new())
+    run_desktop_with(control::LaunchArgs::default())
+}
+
+pub fn run_desktop_with(launch: control::LaunchArgs) -> eframe::Result {
+    run(app_spec(), move |ctx| {
+        let mut app = GrammarCraftApp::new();
+        app.session.enable_desktop_ai_storage();
+        if let Some(first_file) = launch.files.first()
+            && app.run_and_report("doc.open", json!({ "path": first_file }))
+        {
+            app.current_path = Some(first_file.clone());
+            app.sync_editor_from_session();
+        }
+        if let Some(port) = launch.control.port {
+            let host = WindowHost::of(ctx);
+            match control::ControlServer::start(&launch.control, port, host) {
+                Ok((rx, server)) => {
+                    let channel = ControlChannel::new(rx);
+                    app = app.with_control(channel, Some(server));
+                }
+                Err(err) => {
+                    eprintln!("warning: {err}");
+                    app.status_notice = Some((err, true));
+                }
+            }
+        }
+        app
+    })
 }

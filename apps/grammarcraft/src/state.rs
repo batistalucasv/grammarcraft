@@ -1,12 +1,14 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use craft::automation::control::ControlChannel;
 use craft::dialogs::{Answer, Dialogs, FileDialog};
 use craft::host::{Host, Wake};
 use craft::ui::contract::{CommandSet as _, Props as _, Show as _};
 use craft::ui::runtime::commands::NavCommand;
 use craft::ui::runtime::env::Label;
 use craft::ui::runtime::frame::{FrameInput, FrameOutput};
+use craft::ui::runtime::windows::WindowHost;
 use craft::ui::shell::app::ShellApp;
 use craft::ui::shell::embed::{self, CloseDecision};
 use grammarcraft_core::{
@@ -16,6 +18,7 @@ use grammarcraft_core::{
 use grammarcraft_engine::{AnalysisReport, CmdError, Session};
 use serde_json::{Value, json};
 
+use crate::control::ControlServer;
 use crate::editor;
 use crate::sidebar;
 use crate::theme_bridge::{AppColors, ThemeMode, build_host, frame_input, sync_egui_visuals};
@@ -112,6 +115,8 @@ pub struct GrammarCraftApp {
     pub status_notice: Option<(String, bool)>,
     pub host: Arc<Host>,
     pub(crate) dialogs: Option<Dialogs<FileAction>>,
+    pub(crate) control: Option<ControlChannel>,
+    pub(crate) control_server: Option<ControlServer>,
 }
 
 impl Default for GrammarCraftApp {
@@ -147,6 +152,8 @@ impl GrammarCraftApp {
             status_notice: None,
             host: build_host(),
             dialogs: None,
+            control: None,
+            control_server: None,
         };
         app.refresh_check();
         app
@@ -157,6 +164,26 @@ impl GrammarCraftApp {
         app.editor_text = text.to_owned();
         app.set_text_and_check();
         app
+    }
+
+    pub fn with_control(mut self, channel: ControlChannel, server: Option<ControlServer>) -> Self {
+        self.control = Some(channel);
+        self.control_server = server;
+        self
+    }
+
+    pub fn control_logic(&mut self, ctx: &egui::Context) {
+        let Some(mut channel) = self.control.take() else {
+            return;
+        };
+        let host = WindowHost::of(ctx);
+        channel.poll_input(&host);
+        channel.poll_access_trees(ctx);
+        while let Some(req) = channel.next_request() {
+            let reply = crate::control::handle_request(self, ctx, &req);
+            channel.settle(req, reply, None, 0.0);
+        }
+        self.control = Some(channel);
     }
 
     pub fn install_dialogs(&mut self, ctx: &egui::Context) {
@@ -714,7 +741,9 @@ impl ShellApp for GrammarCraftApp {
         self.pump_dialogs(None);
     }
 
-    fn logic(&mut self, _ctx: &egui::Context) {}
+    fn logic(&mut self, ctx: &egui::Context) {
+        self.control_logic(ctx);
+    }
 
     fn close_requested(&mut self) -> CloseDecision {
         CloseDecision::Close
@@ -734,6 +763,7 @@ impl eframe::App for GrammarCraftApp {
     }
 
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.control_logic(ctx);
         embed::logic(ctx, || CloseDecision::Close);
     }
 

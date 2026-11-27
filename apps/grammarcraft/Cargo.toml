@@ -15,7 +15,7 @@ workspace = true
 grammarcraft-core = { workspace = true }
 grammarcraft-rules = { workspace = true }
 grammarcraft-engine = { workspace = true }
-craft = { workspace = true, features = ["ui", "ui-app", "theme-store", "dialogs"] }
+craft = { workspace = true, features = ["ui", "ui-app", "theme-store", "dialogs", "automation"] }
 egui = { workspace = true, features = ["default_fonts"] }
 eframe = { workspace = true, features = ["default_fonts", "wgpu", "accesskit", "wayland", "x11"] }
 serde_json = { workspace = true }
