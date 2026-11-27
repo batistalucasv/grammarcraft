@@ -1,90 +1,135 @@
-use crate::{CoreError, Document, MAX_NOTE_BYTES, MAX_NOTES, NoteId};
+use crate::{
+    Audience, Context, CoreError, Document, Formality, MAX_DOCUMENT_BYTES, MAX_GOAL_VALUE_BYTES,
+    Purpose, TextSpan, TextStats, WritingGoals,
+};
 
 #[test]
-fn a_note_is_added_with_a_fresh_id() {
+fn setting_text_stores_exact_content_and_measures_stats() {
     let mut doc = Document::new();
-    let first = doc.add_note("buy milk").expect("a short note is valid");
-    let second = doc.add_note("book a room").expect("a short note is valid");
-    assert_ne!(first, second);
-    assert_eq!(doc.len(), 2);
-    assert_eq!(doc.get(first).map(|n| n.text.as_str()), Some("buy milk"));
-}
-
-#[test]
-fn text_is_trimmed_before_storage() {
-    let mut doc = Document::new();
-    let id = doc
-        .add_note("  padded  ")
-        .expect("text with padding is valid");
-    assert_eq!(doc.get(id).map(|n| n.text.as_str()), Some("padded"));
+    let stats = doc
+        .set_text("  First sentence. Second sentence!  ")
+        .expect("non-blank text is accepted");
+    assert_eq!(doc.text(), "  First sentence. Second sentence!  ");
+    assert_eq!(stats.words, 4);
+    assert_eq!(stats.sentences, 2);
+    assert_eq!(stats.paragraphs, 1);
+    assert!(!doc.is_empty());
 }
 
 #[test]
 fn empty_and_blank_text_is_rejected() {
     let mut doc = Document::new();
     for text in ["", " ", "\n\t ", "\u{00a0}"] {
-        assert_eq!(doc.add_note(text), Err(CoreError::EmptyText), "{text:?}");
+        assert_eq!(doc.set_text(text), Err(CoreError::EmptyText), "{text:?}");
     }
     assert!(doc.is_empty());
 }
 
 #[test]
-fn oversized_text_is_rejected_before_it_is_trimmed() {
+fn max_document_bytes_is_accepted_and_max_plus_one_is_rejected() {
     let mut doc = Document::new();
-    let text = "a".repeat(MAX_NOTE_BYTES + 1);
+    let exact = "a".repeat(MAX_DOCUMENT_BYTES);
+    let stats = doc.set_text(&exact).expect("MAX_DOCUMENT_BYTES fits");
+    assert_eq!(stats.bytes, MAX_DOCUMENT_BYTES);
+
+    let too_long = "b".repeat(MAX_DOCUMENT_BYTES + 1);
     assert_eq!(
-        doc.add_note(&text),
+        doc.set_text(&too_long),
         Err(CoreError::TextTooLong {
-            max: MAX_NOTE_BYTES
+            max: MAX_DOCUMENT_BYTES
         })
     );
-    assert!(doc.is_empty());
-}
-
-#[test]
-fn the_note_count_is_bounded() {
-    let mut doc = Document::new();
-    for _ in 0..MAX_NOTES {
-        doc.add_note("x").expect("within the bound");
-    }
     assert_eq!(
-        doc.add_note("one more"),
-        Err(CoreError::TooManyNotes { max: MAX_NOTES })
+        doc.len_bytes(),
+        MAX_DOCUMENT_BYTES,
+        "rejected input must not overwrite the existing document"
     );
-    assert_eq!(doc.len(), MAX_NOTES);
 }
 
 #[test]
-fn removing_a_note_keeps_the_other_ids_stable() {
+fn multibyte_utf8_spans_enforce_char_boundaries() {
     let mut doc = Document::new();
-    let first = doc.add_note("first").expect("valid");
-    let second = doc.add_note("second").expect("valid");
-    doc.remove_note(first).expect("the note exists");
-    assert_eq!(doc.len(), 1);
-    assert_eq!(doc.get(second).map(|n| n.text.as_str()), Some("second"));
-    assert!(doc.get(first).is_none());
+    doc.set_text("Olá, café!").expect("valid UTF-8 text");
+    // 'á' starts at byte 2 and takes 2 bytes (bytes 2..4); 'é' is bytes 8..10.
+    let valid = doc.span(0, 4).expect("valid char boundaries");
+    assert_eq!(doc.slice(valid).expect("valid slice"), "Olá");
+    assert_eq!(valid.len(), 4);
+    assert!(!valid.is_empty());
+
+    assert_eq!(
+        doc.span(0, 3),
+        Err(CoreError::NonCharBoundary { offset: 3 })
+    );
+    assert_eq!(
+        doc.span(3, 4),
+        Err(CoreError::NonCharBoundary { offset: 3 })
+    );
+    assert_eq!(
+        doc.span(5, 2),
+        Err(CoreError::InvalidSpan {
+            start: 5,
+            end: 2,
+            len: doc.len_bytes(),
+        })
+    );
+    assert_eq!(
+        TextSpan::new(doc.text(), 0, doc.len_bytes() + 1),
+        Err(CoreError::InvalidSpan {
+            start: 0,
+            end: doc.len_bytes() + 1,
+            len: doc.len_bytes(),
+        })
+    );
 }
 
 #[test]
-fn removing_twice_reports_the_stale_id() {
-    let mut doc = Document::new();
-    let id = doc.add_note("only").expect("valid");
-    doc.remove_note(id).expect("the note exists");
-    assert_eq!(doc.remove_note(id), Err(CoreError::UnknownNote(id)));
+fn stats_measure_handles_empty_decimals_and_multiple_paragraphs() {
+    assert_eq!(TextStats::measure(""), TextStats::default());
+
+    let text = "Versão 3.14 funciona bem!\n\nSegunda linha com ação.\n";
+    let stats = TextStats::measure(text);
+    assert_eq!(stats.bytes, text.len());
+    assert_eq!(stats.chars, text.chars().count());
+    assert_eq!(stats.words, 8);
+    assert_eq!(stats.sentences, 2);
+    assert_eq!(stats.paragraphs, 2);
 }
 
 #[test]
-fn ids_are_not_reused_after_clear() {
-    let mut doc = Document::new();
-    let old = doc.add_note("before").expect("valid");
-    assert_eq!(doc.clear(), 1);
-    let new = doc.add_note("after").expect("valid");
-    assert_ne!(old, new, "a stale id must not point at a new note");
+fn writing_goals_parse_valid_and_reject_invalid_values() {
+    let goals = WritingGoals {
+        audience: Audience::parse(" Technical-Executive ").expect("valid audience"),
+        formality: Formality::parse("FORMAL").expect("valid formality"),
+        context: Context::parse("academic").expect("valid context"),
+        purpose: Purpose::parse("persuade").expect("valid purpose"),
+    };
+    assert_eq!(goals.audience, Audience::TechnicalExecutive);
+    assert_eq!(goals.formality, Formality::Formal);
+    assert_eq!(goals.context, Context::Academic);
+    assert_eq!(goals.purpose, Purpose::Persuade);
+
+    assert!(matches!(
+        Audience::parse("unknown"),
+        Err(CoreError::InvalidGoal {
+            field: "audience",
+            ..
+        })
+    ));
+    let oversized = "x".repeat(MAX_GOAL_VALUE_BYTES + 1);
+    assert!(matches!(
+        Purpose::parse(&oversized),
+        Err(CoreError::InvalidGoal {
+            field: "purpose",
+            ..
+        })
+    ));
 }
 
 #[test]
-fn the_id_is_printable() {
+fn clear_empties_document_and_returns_removed_bytes() {
     let mut doc = Document::new();
-    let id = doc.add_note("x").expect("valid");
-    assert_eq!(NoteId::get(id).to_string(), id.to_string());
+    doc.set_text("hello").expect("valid text");
+    assert_eq!(doc.clear(), 5);
+    assert!(doc.is_empty());
+    assert_eq!(doc.clear(), 0);
 }

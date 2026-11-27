@@ -24,7 +24,7 @@ grammarcraft-cli — grammarcraft from the command line
 USAGE:
   grammarcraft-cli commands             list every command as JSON
   grammarcraft-cli run <id> [json]      run a command with its parameters (default {})
-  grammarcraft-cli notes                list the notes in a fresh session
+  grammarcraft-cli stats                measure text stats in a fresh session
   grammarcraft-cli -h | --help          this text
 
 EXIT CODES:
@@ -58,7 +58,7 @@ fn dispatch(args: Vec<String>) -> Result<ExitCode, String> {
             args.get(1).map(String::as_str),
             args.get(2).map(String::as_str),
         ),
-        "notes" => run_command(Some("note.list"), None),
+        "stats" => run_command(Some("stats.measure"), None),
         "-h" | "--help" | "help" => {
             print!("{USAGE}");
             Ok(ExitCode::SUCCESS)

@@ -15,7 +15,8 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 
 ## M1 — Core domain, persistence, undo/redo & confined CLI/MCP
 
-- [ ] Implement `grammarcraft-core` (L0): `Document`, UTF-8-safe `TextSpan`, `WritingGoals`, `Issue`, `StyleGuide`, `Snippet`, `CoreError`, `MAX_*` bounds, zero I/O / zero JSON / zero panics
+- [x] Replace `Note` example with initial `grammarcraft-core` (`Document`, UTF-8-safe `TextSpan`, `WritingGoals`, `TextStats`, `CoreError`, `MAX_DOCUMENT_BYTES`), `grammarcraft-engine` (`Session`, `doc.set_text`, `doc.get`, `doc.clear`, `goals.set`, `stats.measure`, `hostile_parameters_never_panic`), and `grammarcraft-cli` integration tests
+- [ ] Extend `grammarcraft-core` (L0) with `Issue`, `IssueCategory`, `StyleGuide`, `Snippet`, `ReadabilityMetrics`, `WritingScore`, and `MAX_*` bounds (zero I/O / zero JSON / zero panics)
 - [ ] Implement `grammarcraft-rules` (L1) base pipeline wrapping `craft-proof` and `craft-text` with per-paragraph incremental caching and per-document ignore/dictionary isolation
 - [ ] Implement `grammarcraft-engine` (L2): `Session`, bounded undo/redo stack, versioned atomic save/open (`.grammarcraft.json`, `.txt`, `.md`, `.docx` via `craft-docx`), `AutomationRoots` file confinement
 - [ ] Register initial `doc.*`, `history.*`, `review.*`, and `goals.*` `CommandSpec` catalog with `hostile_parameters_never_panic` passing 100%
@@ -63,3 +64,4 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 | Date | Milestone | What changed |
 | --- | --- | --- |
 | 2026-11-27 | M0 | Instantiated from `craft-template` (`42f4fb7`), pushed `main` to `batistalucasv/grammarcraft`, and initialized `clean-room/` records, `docs/feature-names.md`, `docs/target-app-parity.md`, `docs/gaps.md`, and `docs/roadmap.md` |
+| 2026-11-27 | M1 | Replaced `Note` template domain with `Document`, `TextSpan`, `WritingGoals`, `TextStats`, `CoreError`, `doc.*`/`goals.set`/`stats.measure` commands, and CLI tests (`cargo xtask ci` green) |

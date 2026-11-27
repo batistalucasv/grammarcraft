@@ -25,13 +25,24 @@ fn commands_lists_the_registry_as_json() {
         .iter()
         .filter_map(|entry| entry.get("id").and_then(serde_json::Value::as_str))
         .collect();
-    assert!(ids.contains(&"note.add"));
-    assert!(ids.contains(&"note.list"));
+    for expected in [
+        "doc.set_text",
+        "doc.get",
+        "doc.clear",
+        "goals.set",
+        "stats.measure",
+    ] {
+        assert!(ids.contains(&expected), "missing `{expected}` in {ids:?}");
+    }
 }
 
 #[test]
 fn a_command_runs_and_prints_its_result() {
-    let output = cli(&["run", "note.add", r#"{"text":"from the test"}"#]);
+    let output = cli(&[
+        "run",
+        "doc.set_text",
+        r#"{"text":"Hello, world! Second line."}"#,
+    ]);
     assert!(
         output.status.success(),
         "{}",
@@ -39,21 +50,29 @@ fn a_command_runs_and_prints_its_result() {
     );
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).expect("stdout is JSON");
     assert_eq!(
-        parsed.get("id").and_then(serde_json::Value::as_u64),
-        Some(1)
+        parsed.get("words").and_then(serde_json::Value::as_u64),
+        Some(4)
+    );
+    assert_eq!(
+        parsed.get("sentences").and_then(serde_json::Value::as_u64),
+        Some(2)
     );
 }
 
 #[test]
 fn a_failing_command_exits_one() {
-    let output = cli(&["run", "note.remove", r#"{"id":42}"#]);
-    assert_eq!(output.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("bad parameters"));
+    let bad_params = cli(&["run", "doc.set_text", r#"{"text":""}"#]);
+    assert_eq!(bad_params.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&bad_params.stderr).contains("bad parameters"));
+
+    let disabled = cli(&["run", "doc.clear"]);
+    assert_eq!(disabled.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&disabled.stderr).contains("not available"));
 }
 
 #[test]
 fn an_unknown_command_exits_one() {
-    let output = cli(&["run", "note.teleport"]);
+    let output = cli(&["run", "doc.teleport"]);
     assert_eq!(output.status.code(), Some(1));
     assert!(String::from_utf8_lossy(&output.stderr).contains("unknown command"));
 }
@@ -63,21 +82,22 @@ fn a_wrong_command_line_exits_two() {
     assert_eq!(cli(&["frobnicate"]).status.code(), Some(2));
     assert_eq!(cli(&["run"]).status.code(), Some(2));
     assert_eq!(
-        cli(&["run", "note.add", "{not json"]).status.code(),
+        cli(&["run", "doc.set_text", "{not json"]).status.code(),
         Some(2)
     );
 }
 
 #[test]
-fn notes_on_a_fresh_session_is_an_empty_list() {
-    let output = cli(&["notes"]);
+fn stats_on_a_fresh_session_is_all_zeros() {
+    let output = cli(&["stats"]);
     assert!(output.status.success());
     let parsed: serde_json::Value = serde_json::from_slice(&output.stdout).expect("stdout is JSON");
     assert_eq!(
-        parsed
-            .get("notes")
-            .and_then(serde_json::Value::as_array)
-            .map(Vec::len),
+        parsed.get("words").and_then(serde_json::Value::as_u64),
+        Some(0)
+    );
+    assert_eq!(
+        parsed.get("bytes").and_then(serde_json::Value::as_u64),
         Some(0)
     );
 }

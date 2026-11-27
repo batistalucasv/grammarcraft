@@ -3,7 +3,7 @@ name = "grammarcraft-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Domain types for grammarcraft: documents, notes and the invariants they hold"
+description = "Domain types for grammarcraft: documents, UTF-8 spans, writing goals, text stats and invariants"
 
 [lints]
 workspace = true
