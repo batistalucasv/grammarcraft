@@ -1,0 +1,36 @@
+# GrammarCraft English UI catalog (context<TAB>English<TAB>English)
+app	GrammarCraft	GrammarCraft
+toolbar	Open	Open
+toolbar	Save	Save
+toolbar	Undo	Undo
+toolbar	Redo	Redo
+toolbar	Theme: Light	Theme: Light
+toolbar	Theme: Dark	Theme: Dark
+toolbar	Document Language	Document Language
+toolbar	Document Path	Document Path
+editor	Document Editor	Document Editor
+sidebar	Alerts ({count})	Alerts ({count})
+sidebar	Goals & Score	Goals & Score
+sidebar	Tone Profile	Tone Profile
+sidebar	Style & Snippets	Style & Snippets
+sidebar	AI Assist	AI Assist
+sidebar	Citations & Similarity	Citations & Similarity
+alerts	Apply: {replacement}	Apply: {replacement}
+alerts	Dismiss Once	Dismiss Once
+alerts	Dismiss Document	Dismiss Document
+alerts	Add to Dictionary	Add to Dictionary
+goals	Inclusive language (opt-in)	Inclusive language (opt-in)
+ai	Use Local (Offline)	Use Local (Offline)
+ai	Use Cloud Mode	Use Cloud Mode
+ai	Grant Cloud Consent	Grant Cloud Consent
+ai	Revoke Cloud Consent	Revoke Cloud Consent
+ai	AI Rewrite	AI Rewrite
+ai	AI Adjust Tone	AI Adjust Tone
+ai	AI Summarize	AI Summarize
+ai	AI Expand	AI Expand
+ai	AI Draft	AI Draft
+ai	Apply AI Proposal	Apply AI Proposal
+ai	Discard Proposal	Discard Proposal
+citations	Validate Citations	Validate Citations
+citations	Format Bibliography	Format Bibliography
+similarity	Check Similarity	Check Similarity

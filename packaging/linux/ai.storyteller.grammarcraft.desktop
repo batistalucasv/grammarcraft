@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=GrammarCraft
+GenericName=Writing Assistant
+Comment=Clean-room, privacy-first writing assistant and grammar checker
+Exec=grammarcraft %f
+TryExec=grammarcraft
+Icon=ai.storyteller.grammarcraft
+Terminal=false
+StartupNotify=false
+StartupWMClass=ai.storyteller.grammarcraft
+Categories=Office;WordProcessor;TextTools;
+Keywords=grammar;writing;proofing;style;citations;clarity;
+MimeType=text/plain;text/markdown;application/vnd.openxmlformats-officedocument.wordprocessingml.document;

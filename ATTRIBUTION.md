@@ -12,7 +12,7 @@ generator.
 
 | Asset | Author | Source | Licence | Notes |
 |---|---|---|---|---|
-| _(none yet in repository tree)_ | | | | This repository ships no standalone asset files yet. |
+| `assets/app-icon/grammarcraft.svg` | GrammarCraft contributors | Original work in this repository | MIT OR Apache-2.0 | Minimal geometric nib and check emblem. |
 
 ## Assets bundled through dependencies
 
