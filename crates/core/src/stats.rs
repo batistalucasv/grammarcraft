@@ -1,5 +1,7 @@
+use serde::{Deserialize, Serialize};
+
 /// Basic deterministic measurements of a document's text.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextStats {
     pub bytes: usize,
     pub chars: usize,

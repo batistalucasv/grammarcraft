@@ -32,7 +32,8 @@ impl Class {
 /// Package names without the `grammarcraft-` prefix.
 pub const TABLE: &[(&str, Class)] = &[
     ("core", Class::Layer(0)),
-    ("engine", Class::Layer(1)),
+    ("rules", Class::Layer(1)),
+    ("engine", Class::Layer(2)),
     ("cli", Class::Exempt),
     ("xtask", Class::Exempt),
 ];
@@ -218,9 +219,13 @@ mod tests {
     fn a_downward_graph_passes() {
         let graph = [
             krate("grammarcraft-core", &[("serde", Normal, false)]),
+            krate("grammarcraft-rules", &[("grammarcraft-core", Normal, true)]),
             krate(
                 "grammarcraft-engine",
-                &[("grammarcraft-core", Normal, true)],
+                &[
+                    ("grammarcraft-core", Normal, true),
+                    ("grammarcraft-rules", Normal, true),
+                ],
             ),
             krate("grammarcraft-cli", &[("grammarcraft-engine", Normal, true)]),
             krate("xtask", &[("grammarcraft-engine", Dev, true)]),
@@ -235,7 +240,7 @@ mod tests {
             &[("grammarcraft-engine", Normal, true)],
         )]);
         assert!(
-            matches!(violations[..], [Violation::Upward { from: 0, to: 1, .. }]),
+            matches!(violations[..], [Violation::Upward { from: 0, to: 2, .. }]),
             "{violations:?}"
         );
     }

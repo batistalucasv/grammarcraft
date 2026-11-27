@@ -7,14 +7,18 @@ default-members = ["crates/*", "apps/grammarcraft-cli", "xtask"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-rust-version = "1.85"
+rust-version = "1.95"
 repository = "https://github.com/batistalucasv/grammarcraft"
 
 # Every internal crate is listed here once, so a version bump or a new shared
 # dependency is one edit. Members reach them with `{ workspace = true }`.
 [workspace.dependencies]
 grammarcraft-core = { path = "crates/core" }
+grammarcraft-rules = { path = "crates/rules" }
 grammarcraft-engine = { path = "crates/engine" }
+
+craft-proof = { git = "https://github.com/storytold/craft-libs", rev = "8be80b006888ae023d61eed265241c9b78b84981" }
+craft-atomic = { git = "https://github.com/storytold/craft-libs", rev = "8be80b006888ae023d61eed265241c9b78b84981" }
 
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }

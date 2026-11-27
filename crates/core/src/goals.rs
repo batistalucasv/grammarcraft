@@ -1,10 +1,13 @@
+use serde::{Deserialize, Serialize};
+
 use crate::{CoreError, CoreResult};
 
 /// Maximum accepted byte length for a goal option string.
 pub const MAX_GOAL_VALUE_BYTES: usize = 64;
 
 /// Target audience axis for writing rules and readability weighting.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Audience {
     #[default]
     General,
@@ -38,7 +41,8 @@ impl Audience {
 }
 
 /// Target formality axis.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Formality {
     Informal,
     #[default]
@@ -70,7 +74,8 @@ impl Formality {
 }
 
 /// Document context / domain axis.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Context {
     #[default]
     General,
@@ -111,7 +116,8 @@ impl Context {
 }
 
 /// Communicative purpose axis.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Purpose {
     #[default]
     Inform,
@@ -146,7 +152,7 @@ impl Purpose {
 }
 
 /// Four-axis writing goal configuration for a document session.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct WritingGoals {
     pub audience: Audience,
     pub formality: Formality,

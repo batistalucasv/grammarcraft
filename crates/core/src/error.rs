@@ -1,4 +1,7 @@
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::IssueId;
 
 /// Everything that can go wrong while enforcing a domain invariant.
 ///
@@ -20,6 +23,35 @@ pub enum CoreError {
     NonCharBoundary { offset: usize },
     #[error("invalid {field} goal `{value}`")]
     InvalidGoal { field: &'static str, value: String },
+    #[error("too many issues (limit {max})")]
+    TooManyIssues { max: usize },
+    #[error("too many suggestions for one issue (limit {max})")]
+    TooManySuggestions { max: usize },
+    #[error("the dictionary term is empty")]
+    EmptyTerm,
+    #[error("the dictionary term is longer than {max} bytes")]
+    TermTooLong { max: usize },
+    #[error("invalid dictionary term `{0}`")]
+    InvalidTerm(String),
+    #[error("personal dictionary holds at most {max} words")]
+    TooManyCustomWords { max: usize },
+    #[error("ignored issue list holds at most {max} entries")]
+    TooManyIgnoredIssues { max: usize },
+    #[error("there is no issue with id {0}")]
+    UnknownIssue(IssueId),
+    #[error("issue ids are exhausted")]
+    IdsExhausted,
 }
 
 pub type CoreResult<T> = Result<T, CoreError>;
+
+/// Convenience helper for serializing error-free domain snapshots.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BoundsSnapshot {
+    pub max_document_bytes: usize,
+    pub max_issues: usize,
+    pub max_suggestions_per_issue: usize,
+    pub max_custom_words: usize,
+    pub max_term_bytes: usize,
+    pub max_undo_steps: usize,
+}
