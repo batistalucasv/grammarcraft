@@ -1,20 +1,21 @@
 # Gaps
 
-Ranked work the template does **not** do yet. Each row is an extension point with a known seam, so
-a new project can pick what it needs instead of growing organically.
+Ranked work the repository does **not** implement yet, ordered strictly by dependency. Each row names the existing seam and an objective definition of "done". When a gap closes, delete its row and record the change in [`architecture.md`](architecture.md).
 
 | # | Gap | Where the seam already is | What "done" looks like |
-|---|---|---|---|
-| 1 | Nothing is persisted | `Document` is in memory; `Session::new()` starts empty | `io` module in L1: save/load with a format you can version, plus a round-trip test |
-| 2 | No undo | `Session::run` is the single mutation point | Snapshot or command log around `run`, with a test that undo restores the exact document |
-| 3 | A command list is not a UI | `Registry::describe` already emits JSON | A front end that dispatches by id and never touches `Document` directly |
-| 4 | No structured logging | errors are returned, not recorded | `log` + a subscriber in the binary; no `println!` in libraries |
-| 5 | No localisation | strings are inline | a catalog keyed by command id; the `label` field becomes a key |
-| 6 | No packaging | `cargo build --release` only | a release workflow calling `craft-common-actions`, and a version source of truth |
-| 7 | No benchmarks | tests prove behaviour, not cost | a criterion or divan bench for the hot path once there is one |
-
-Do not start a gap before the one it depends on: undo is cheap once every mutation goes through
-`run`, and expensive before.
-
-When a gap closes, delete its row and record the change in `docs/architecture.md`'s revision
-history. A gap list that only grows stops being read.
+| --- | --- | --- | --- |
+| 1 | Workspace pins, licence guard (`deny.toml`), and Rule 4 name searches | Template `Cargo.toml` at `42f4fb7` + `clean-room/` + `docs/feature-names.md` | Single `storytold/egui` fork pin matching `craft-libs`, `rust-version = "1.95"`, `deny.toml` enforcing `licences.md` allowlist, USPTO/EUIPO/TMview/WIPO checks logged in `docs/feature-names.md`, and remote `gate`/`house-rules` green on `main` PR |
+| 2 | Writing & review domain model in L0 (`grammarcraft-core`) | `crates/core/src/doc.rs` and `CoreError` | `Document`, UTF-8-safe `TextSpan`, `WritingGoals`, `Issue`/`IssueCategory`, `StyleGuide`, `Snippet`, `ReadabilityMetrics`, `WritingScore`, and `MAX` / `MAX + 1` bound tests with zero I/O or JSON |
+| 3 | Atomic persistence and open formats (`.grammarcraft.json`, `.txt`, `.md`, `.docx`) | `Session` in `crates/engine` + `craft-atomic` / `craft-docx` in `craft-libs` | `io` module in engine with versioned schema, crash-safe atomic write, `.docx` round-trip via `craft-docx`, and round-trip tests |
+| 4 | Bounded Undo/Redo stack and root confinement (`AutomationRoots`) | `Session::run` as single mutation boundary | `history.undo` / `history.redo` restoring text, selection, and document-scoped ignores (bounded by `MAX_UNDO_STEPS`); single `file_access` module blocking reads/writes outside `--automation-read-root` / `--automation-write-root` |
+| 5 | `craft-proof` / `craft-text` base adapter in L1 (`grammarcraft-rules`) | `craft_proof::check_text_with` + `craft_text::segment` | Paragraph-incremental pipeline (keyed by hash + `WritingGoals` + `dictionary_generation()`), per-document ignore/dictionary isolation, `review.*` commands, and `hostile_parameters_never_panic` passing |
+| 6 | Root-confined MCP server and CLI diagnostics (JSON / SARIF) | `craft-mcp-server` + `apps/grammarcraft-cli/src/main.rs` | `grammarcraft-cli mcp` refusing startup without `--automation-read-root` and `--automation-write-root`, exposing `CommandSpec` catalog, and `grammarcraft-cli check` JSON/SARIF output tested against built binary |
+| 7 | Deterministic contextual spelling, expanded grammar, and regional variants | `grammarcraft-rules` + `craft-i18n` `Embeddable` data | Contextual paronym/homophone rules (EN/PT-BR/ES), agreement/crasis/punctuation rules, regional variant mix alerts, and anti-false-positive corpus tests with zero `GPL`/`LGPL` code |
+| 8 | Clarity, style, readability indices, and open `WritingScore` | `craft-proof` / `craft-text` hyphenation + `grammarcraft-core` metrics | Passive voice (modulated by `WritingGoals`), long/complex sentences, redundancies/pleonasms, sliding-window repetition, syntactic rhythm, open readability formulas, and transparent 0–100 `WritingScore` |
+| 9 | Declarative `StyleRules`, `PersonalDictionary` (`CUSTOM.DIC`), and expandable `Snippets` | `StyleGuide` & `SnippetCatalog` in L0 + linear-time `regex` | `CUSTOM.DIC` (UTF-16LE + UTF-8) import/export, TOML/JSON team terminology rules using linear-time `regex`, and `{{field}}` snippet expansion via `CommandSpec` |
+| 10 | Native desktop app (`egui` + `craft-ui-shell` + AccessKit) | `craft-ui-shell`, `craft-ui-patterns`, `craft-ui-widgets`, `craft-theme`, `craft-design-lint` | Editor with redundant category underlines (colour + stroke pattern + icon), suggestion cards, bidirectional Review Pane, full keyboard navigation (`Tab`/`F6`/`Esc`), tested AccessKit tree, and `craft-design-lint` green |
+| 11 | Multi-signal tone analysis and opt-in inclusive language | `ToneProfile` in L0 + `grammarcraft-rules` | Explainable deterministic classifier (up to 3 tones anchored to evidence spans), formality/consistency/opt-in inclusive rules, and benchmark tests |
+| 12 | Hybrid generative AI assistance with consent ledger and atomic diff | `craft-ai-client`, `craft-ai-openai`, `craft-ai-native`, `craft-ai-egui`, `craft-ai-engine` | `ai.rewrite`/`adjustTone`/`summarize`/`expand`/`draft` via OpenAI-compatible provider + NLP `ModelRunner` in `craft-ai-engine-rten`, `SecretStore` + `ConsentFile`, word-level diff preview, and single-step undo via `ai.applyResult` |
+| 13 | Local authorized-corpus similarity check and 12-style citation formatting | `grammarcraft-rules` + `wordcraft` 12-style bibliography set | Local N-gram/MinHash matching over `AutomationRoots`-confined directories, optional uncited-claim hint, and `CSL`/`BibTeX` validation/formatting for all 12 standard styles |
+| 14 | Suite integration, `craft-i18n` catalogs, and release packaging | `craft-proof`, `craft-i18n`, `craft-ai-agents`, `craft-common-actions/release.yml` | Generic rules upstreamed to `craft-proof` (benefiting `wordcraft`), `grammarcraft.tsv` catalogs in `craft-i18n`, `KNOWN_APPS` entry in `craft-ai-agents`, `packaging/`, and green `release.yml` dry-run |
+| 15 | Pure-Rust system-wide OS overlay (post-M5) | Isolated platform adapters (`craft-win32`, `craft-appkit`, `AT-SPI2`) + `craft-window` | Separate overlay prototype via UIA/`AXUIElement`/`AT-SPI2` with zero JS/Electron/webview and `unsafe` strictly outside L0–L2, tested per platform |
