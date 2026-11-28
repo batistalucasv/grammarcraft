@@ -259,3 +259,132 @@ fn stats_on_a_fresh_session_is_all_zeros() {
         Some(0)
     );
 }
+
+#[test]
+fn quick_review_supports_text_file_stdin_goals_and_apply_all() {
+    let text_out = cli(&[
+        "quick-review",
+        "--text",
+        "Teh system is gonna ship in order to help.",
+        "--lang",
+        "en-US",
+        "--audience",
+        "specialized",
+        "--formality",
+        "formal",
+    ]);
+    assert!(
+        text_out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&text_out.stderr)
+    );
+    let compact = String::from_utf8_lossy(&text_out.stdout);
+    assert_eq!(compact.trim().lines().count(), 1, "expected compact JSON");
+    let parsed: serde_json::Value =
+        serde_json::from_str(compact.trim()).expect("compact JSON parses");
+    assert_eq!(parsed["language"], "en-US");
+    assert!(parsed["issues"].as_array().is_some_and(|a| !a.is_empty()));
+    assert!(parsed["score"]["score"].is_number());
+    assert!(parsed["tone"].is_object());
+
+    let apply_out = cli(&[
+        "quick-review",
+        "--text",
+        "Teh cat recieve teh note.",
+        "--apply-all",
+    ]);
+    assert!(
+        apply_out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&apply_out.stderr)
+    );
+    let corrected = String::from_utf8_lossy(&apply_out.stdout);
+    assert!(corrected.contains("receive"), "{corrected}");
+    assert!(!corrected.contains("recieve"), "{corrected}");
+    assert!(!corrected.contains("Teh"), "{corrected}");
+
+    let base = std::env::temp_dir().join(format!("gc-cli-qr-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("temp dir");
+    let file = base.join("note.md");
+    std::fs::write(&file, "Ficou cada vez mas claro.").expect("write md");
+    let file_out = cli(&[
+        "quick-review",
+        "--file",
+        file.to_str().expect("utf8 path"),
+        "--lang",
+        "pt-BR",
+        "--apply-all",
+    ]);
+    let _ = std::fs::remove_dir_all(&base);
+    assert!(
+        file_out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&file_out.stderr)
+    );
+    let file_corrected = String::from_utf8_lossy(&file_out.stdout);
+    assert_eq!(file_corrected.trim(), "Ficou cada vez mais claro.");
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_grammarcraft-cli"))
+        .args(["quick-review", "--stdin", "--lang", "en-US"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn quick-review --stdin");
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin")
+        .write_all(b"Their is an issue.")
+        .expect("write stdin");
+    let stdin_out = child.wait_with_output().expect("wait stdin");
+    assert!(
+        stdin_out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&stdin_out.stderr)
+    );
+    let stdin_json: serde_json::Value =
+        serde_json::from_slice(&stdin_out.stdout).expect("stdin JSON");
+    assert!(
+        stdin_json["issues"]
+            .as_array()
+            .is_some_and(|a| a.iter().any(|i| i["excerpt"] == "Their"))
+    );
+
+    assert_eq!(cli(&["quick-review"]).status.code(), Some(2));
+    assert_eq!(
+        cli(&["quick-review", "--text", "a", "--stdin"])
+            .status
+            .code(),
+        Some(2)
+    );
+    assert_eq!(
+        cli(&["quick-review", "--text", "a", "--bogus"])
+            .status
+            .code(),
+        Some(2)
+    );
+
+    let mut oversized = Command::new(env!("CARGO_BIN_EXE_grammarcraft-cli"))
+        .args(["quick-review", "--stdin"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn oversized quick-review --stdin");
+    let too_big = vec![b'a'; 1024 * 1024 + 1];
+    oversized
+        .stdin
+        .as_mut()
+        .expect("stdin")
+        .write_all(&too_big)
+        .expect("write oversized stdin");
+    let oversized_out = oversized.wait_with_output().expect("wait oversized");
+    assert_eq!(oversized_out.status.code(), Some(1));
+    assert!(
+        String::from_utf8_lossy(&oversized_out.stderr).contains("exceeds maximum size"),
+        "{}",
+        String::from_utf8_lossy(&oversized_out.stderr)
+    );
+}

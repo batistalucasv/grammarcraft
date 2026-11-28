@@ -76,7 +76,10 @@ fn show_action_bar(app: &mut GrammarCraftApp, ui: &mut egui::Ui, ctx: &egui::Con
     let has_text = !app.session.doc().is_empty();
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
-        if primary_button(ui, "Apply All", has_fixable).clicked() {
+        if primary_button(ui, "Apply All & Copy", has_fixable && has_text).clicked() {
+            app.apply_all_and_copy(ctx);
+        }
+        if craft_button(ui, "Apply All", has_fixable).clicked() {
             app.apply_all_suggestions();
         }
         if craft_button(ui, "Paste & Review", true).clicked() {

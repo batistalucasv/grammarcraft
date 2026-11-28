@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Name=GrammarCraft Quick Review
+GenericName=Quick Writing Review
+Comment=Review clipboard text or a selected file in GrammarCraft Quick Review
+Exec=grammarcraft --quick-review --from-clipboard
+TryExec=grammarcraft
+Icon=ai.storyteller.grammarcraft
+Terminal=false
+StartupNotify=false
+StartupWMClass=ai.storyteller.grammarcraft
+Categories=Office;WordProcessor;
+Keywords=grammar;writing;quick review;clipboard;proofing;
+MimeType=text/plain;text/markdown;application/vnd.openxmlformats-officedocument.wordprocessingml.document;
+Actions=ReviewFile;
+
+[Desktop Action ReviewFile]
+Name=Quick Review File
+Exec=grammarcraft --quick-review --file %f

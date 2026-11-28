@@ -22,6 +22,7 @@ mod io;
 pub use ai::{AiBackend, CraftProviderBackend, LocalOfflineBackend};
 pub use cmd::{CommandSpec, Registry, registry};
 pub use error::{CmdError, CmdResult};
+pub use grammarcraft_core::MAX_DOCUMENT_BYTES;
 pub use grammarcraft_rules::AnalysisReport;
 
 use std::collections::VecDeque;
