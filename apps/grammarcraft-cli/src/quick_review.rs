@@ -4,6 +4,8 @@ use std::process::ExitCode;
 use grammarcraft_engine::{MAX_DOCUMENT_BYTES, Session};
 use serde_json::{Map, Value, json};
 
+use crate::output::{self, OutputFormat};
+
 const QUICK_REVIEW_USAGE: &str = "\
 grammarcraft-cli quick-review — quick review text, a file, or stdin
 
@@ -17,6 +19,7 @@ OPTIONS:
   --lang <TAG>             override document language tag (e.g. en-US, pt-BR, es-ES)
   --audience <AUDIENCE>    writing goal audience (general, specialized, technical_executive)
   --formality <FORMALITY>  writing goal formality (informal, neutral, formal)
+  --format <FMT>           output format: json (default), text, or sarif
   --apply-all              apply top suggestions and print corrected text
   -h, --help               print this help
 ";
@@ -34,6 +37,7 @@ struct QuickReviewArgs {
     lang: Option<String>,
     audience: Option<String>,
     formality: Option<String>,
+    format: OutputFormat,
     apply_all: bool,
     help: bool,
 }
@@ -50,6 +54,12 @@ pub(crate) fn run(args: &[String]) -> Result<ExitCode, String> {
             "`quick-review` requires one of --text <TEXT>, --file <PATH>, or --stdin\n\n{QUICK_REVIEW_USAGE}"
         )
     })?;
+
+    let artifact_uri = match &source {
+        InputSource::File(path) => path.clone(),
+        InputSource::Stdin => "stdin".to_owned(),
+        InputSource::Text(_) => "inline".to_owned(),
+    };
 
     let mut session = Session::new();
     match source {
@@ -114,6 +124,7 @@ pub(crate) fn run(args: &[String]) -> Result<ExitCode, String> {
         return Ok(ExitCode::SUCCESS);
     }
 
+    let doc_text = session.doc().text().to_owned();
     let report = match session.run("review.check", &json!({})) {
         Ok(report) => report,
         Err(err) => {
@@ -121,16 +132,27 @@ pub(crate) fn run(args: &[String]) -> Result<ExitCode, String> {
             return Ok(ExitCode::FAILURE);
         }
     };
-    let compact = json!({
-        "language": report.get("language").cloned().unwrap_or(Value::Null),
-        "stats": report.get("stats").cloned().unwrap_or(Value::Null),
-        "issues": report.get("issues").cloned().unwrap_or_else(|| json!([])),
-        "score": report.get("score").cloned().unwrap_or(Value::Null),
-        "tone": report.get("tone").cloned().unwrap_or(Value::Null),
-    });
-    let line = serde_json::to_string(&compact)
-        .map_err(|error| format!("could not print compact JSON: {error}"))?;
-    println!("{line}");
+    match parsed.format {
+        OutputFormat::Json => {
+            let compact = json!({
+                "language": report.get("language").cloned().unwrap_or(Value::Null),
+                "stats": report.get("stats").cloned().unwrap_or(Value::Null),
+                "issues": report.get("issues").cloned().unwrap_or_else(|| json!([])),
+                "score": report.get("score").cloned().unwrap_or(Value::Null),
+                "tone": report.get("tone").cloned().unwrap_or(Value::Null),
+            });
+            let line = serde_json::to_string(&compact)
+                .map_err(|error| format!("could not print compact JSON: {error}"))?;
+            println!("{line}");
+        }
+        OutputFormat::Text => print!("{}", output::render_text(&report, &doc_text, &artifact_uri)),
+        OutputFormat::Sarif => {
+            println!(
+                "{}",
+                output::render_sarif(&report, &doc_text, &artifact_uri)?
+            );
+        }
+    }
     Ok(ExitCode::SUCCESS)
 }
 
@@ -211,6 +233,13 @@ fn parse_args(args: &[String]) -> Result<QuickReviewArgs, String> {
             }
             other if other.starts_with("--formality=") => {
                 parsed.formality = Some(other.trim_start_matches("--formality=").to_owned());
+            }
+            "--format" => {
+                let val = next_val(args, &mut i, "--format")?;
+                parsed.format = OutputFormat::parse(val)?;
+            }
+            other if other.starts_with("--format=") => {
+                parsed.format = OutputFormat::parse(other.trim_start_matches("--format="))?;
             }
             other => {
                 return Err(format!(

@@ -1,8 +1,9 @@
 use craft::theme::Variant;
 use craft::theme::variant::{Emphasis, Tone};
 use craft::ui::choice::Checkbox;
-use craft::ui::contract::{Bind, Props as _, Show as _};
+use craft::ui::contract::{Bind, Entry, Props as _, Show as _};
 use craft::ui::display::{Badge, Divider};
+use craft::ui::pickers::Select;
 use craft::ui::text::TextField;
 use grammarcraft_core::{
     AiConsentStatus, AiDiffOp, AiLocalityMode, AiMode, CitationStyle, Issue, IssueCategory,
@@ -243,64 +244,46 @@ fn show_goals_tab(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
 }
 
 fn show_goal_selectors(goals: &mut WritingGoals, ui: &mut egui::Ui) {
+    let aud_entries: Vec<_> = GrammarCraftApp::audiences()
+        .into_iter()
+        .map(|aud| Entry::new(aud, aud.as_str()))
+        .collect();
+    let form_entries: Vec<_> = GrammarCraftApp::formalities()
+        .into_iter()
+        .map(|form| Entry::new(form, form.as_str()))
+        .collect();
+    let ctx_entries: Vec<_> = GrammarCraftApp::contexts()
+        .into_iter()
+        .map(|ctx| Entry::new(ctx, ctx.as_str()))
+        .collect();
+    let purp_entries: Vec<_> = GrammarCraftApp::purposes()
+        .into_iter()
+        .map(|purp| Entry::new(purp, purp.as_str()))
+        .collect();
+
     egui::Grid::new("goals_grid")
         .num_columns(2)
         .spacing([8.0, 6.0])
         .show(ui, |ui| {
             ui.label("Audience");
-            let aud_combo = egui::ComboBox::from_id_salt("goal_audience")
-                .selected_text(goals.audience.as_str())
-                .show_ui(ui, |ui| {
-                    for aud in GrammarCraftApp::audiences() {
-                        ui.selectable_value(&mut goals.audience, aud, aud.as_str());
-                    }
-                });
-            ui.ctx()
-                .accesskit_node_builder(aud_combo.response.id, |node| {
-                    node.set_label("Audience");
-                });
+            Select::new("Audience", Bind::bound(&mut goals.audience), &aud_entries).show(ui);
             ui.end_row();
 
             ui.label("Formality");
-            let form_combo = egui::ComboBox::from_id_salt("goal_formality")
-                .selected_text(goals.formality.as_str())
-                .show_ui(ui, |ui| {
-                    for form in GrammarCraftApp::formalities() {
-                        ui.selectable_value(&mut goals.formality, form, form.as_str());
-                    }
-                });
-            ui.ctx()
-                .accesskit_node_builder(form_combo.response.id, |node| {
-                    node.set_label("Formality");
-                });
+            Select::new(
+                "Formality",
+                Bind::bound(&mut goals.formality),
+                &form_entries,
+            )
+            .show(ui);
             ui.end_row();
 
             ui.label("Context");
-            let ctx_combo = egui::ComboBox::from_id_salt("goal_context")
-                .selected_text(goals.context.as_str())
-                .show_ui(ui, |ui| {
-                    for ctx in GrammarCraftApp::contexts() {
-                        ui.selectable_value(&mut goals.context, ctx, ctx.as_str());
-                    }
-                });
-            ui.ctx()
-                .accesskit_node_builder(ctx_combo.response.id, |node| {
-                    node.set_label("Context");
-                });
+            Select::new("Context", Bind::bound(&mut goals.context), &ctx_entries).show(ui);
             ui.end_row();
 
             ui.label("Purpose");
-            let purp_combo = egui::ComboBox::from_id_salt("goal_purpose")
-                .selected_text(goals.purpose.as_str())
-                .show_ui(ui, |ui| {
-                    for purp in GrammarCraftApp::purposes() {
-                        ui.selectable_value(&mut goals.purpose, purp, purp.as_str());
-                    }
-                });
-            ui.ctx()
-                .accesskit_node_builder(purp_combo.response.id, |node| {
-                    node.set_label("Purpose");
-                });
+            Select::new("Purpose", Bind::bound(&mut goals.purpose), &purp_entries).show(ui);
             ui.end_row();
         });
 }
@@ -405,18 +388,16 @@ fn show_style_snippets_tab(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
 }
 
 fn show_style_form(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
-    ui.horizontal(|ui| {
-        ui.selectable_value(
-            &mut app.style_draft.kind,
-            StyleRuleDraftKind::PreferredTerm,
-            "Preferred Term",
-        );
-        ui.selectable_value(
-            &mut app.style_draft.kind,
-            StyleRuleDraftKind::BrandCasing,
-            "Brand Casing",
-        );
-    });
+    let kind_entries = [
+        Entry::new(StyleRuleDraftKind::PreferredTerm, "Preferred Term"),
+        Entry::new(StyleRuleDraftKind::BrandCasing, "Brand Casing"),
+    ];
+    Select::new(
+        "Style Rule Kind",
+        Bind::bound(&mut app.style_draft.kind),
+        &kind_entries,
+    )
+    .show(ui);
     egui::Grid::new("style_rule_form")
         .num_columns(2)
         .spacing([6.0, 4.0])
@@ -599,17 +580,16 @@ fn show_ai_assist_tab(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
 
 fn show_citations_similarity_tab(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
     ui.heading("Citations (12 Styles & BibTeX)");
-    let current_style = app.citation_style;
-    let combo = egui::ComboBox::from_id_salt("citation_style_combo")
-        .selected_text(current_style.display_name())
-        .show_ui(ui, |ui| {
-            for style in CitationStyle::ALL {
-                ui.selectable_value(&mut app.citation_style, style, style.display_name());
-            }
-        });
-    ui.ctx().accesskit_node_builder(combo.response.id, |node| {
-        node.set_label("Citation Style");
-    });
+    let style_entries: Vec<_> = CitationStyle::ALL
+        .iter()
+        .map(|&style| Entry::new(style, style.display_name()))
+        .collect();
+    Select::new(
+        "Citation Style",
+        Bind::bound(&mut app.citation_style),
+        &style_entries,
+    )
+    .show(ui);
 
     let bib_resp = ui.add(
         egui::TextEdit::multiline(&mut app.bibtex_input)

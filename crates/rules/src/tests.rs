@@ -816,3 +816,51 @@ fn monotonous_rhythm_triggers_at_three_sentences_and_relaxes_for_technical_speci
         "expected 3 parallel technical sentences to pass when threshold is 4"
     );
 }
+
+#[test]
+fn craft_text_uax14_and_uax29_preserve_emoji_graphemes_and_unicode_breaks() {
+    use crate::segmentation::{
+        grapheme_boundaries, line_break_opportunities, snap_to_grapheme_boundary,
+    };
+
+    // Emoji ZWJ sequence + combining mark + country flag remain unbroken UAX #29 clusters.
+    let sample = "e\u{0301} 👩🏽‍🔬 🇧🇷";
+    let bounds = grapheme_boundaries(sample, 0..sample.len());
+    let e_end = "e\u{0301}".len();
+    assert!(bounds.contains(&e_end));
+    // Any byte offset inside the combining sequence or multi-codepoint emoji snaps to its cluster start.
+    assert_eq!(snap_to_grapheme_boundary(sample, 1), 0);
+    let scientist_start = sample.find("👩🏽‍🔬").expect("emoji present");
+    assert_eq!(
+        snap_to_grapheme_boundary(sample, scientist_start + 4),
+        scientist_start
+    );
+
+    // UAX #14 mandatory breaks split Unicode U+2029 paragraph separator cleanly in AnalysisEngine.
+    let breaks = line_break_opportunities("First paragraph.\u{2029}Teh typo.", Some("en-US"));
+    assert!(
+        breaks
+            .iter()
+            .any(|b| b.mandatory && b.offset < breaks.last().map_or(0, |l| l.offset))
+    );
+
+    let mut doc = Document::new();
+    doc.set_text("First paragraph.\u{2029}Teh typo.")
+        .expect("valid");
+    let mut engine = AnalysisEngine::new();
+    let rep = engine
+        .analyze(
+            &doc,
+            Some("en-US"),
+            WritingGoals::default(),
+            &PersonalDictionary::new(),
+            &IgnoredIssueSet::new(),
+            &StyleGuide::new(),
+        )
+        .expect("analysis succeeds");
+    assert!(
+        rep.issues
+            .iter()
+            .any(|i| i.rule_id == "proof.spelling" && i.span.slice(doc.text()).ok() == Some("Teh"))
+    );
+}

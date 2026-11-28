@@ -1,7 +1,8 @@
 use craft::theme::Variant;
 use craft::theme::variant::{Emphasis, Tone};
-use craft::ui::contract::{Bind, Props as _, Show as _};
+use craft::ui::contract::{Bind, Entry, Props as _, Show as _};
 use craft::ui::display::{Badge, Divider};
+use craft::ui::pickers::Select;
 use craft::ui::text::TextField;
 
 use crate::state::{FileAction, GrammarCraftApp, PaneFocusTarget, craft_button, primary_button};
@@ -76,20 +77,19 @@ pub fn show(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
 fn show_language_selector(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
     let current_lang = app.session.language_tag().to_owned();
     let mut selected_lang = current_lang.clone();
-    let combo = egui::ComboBox::from_id_salt("toolbar_language")
-        .selected_text(format!("Lang: {current_lang}"))
-        .show_ui(ui, |ui| {
-            for (tag, label) in SUPPORTED_LANGUAGES {
-                ui.selectable_value(
-                    &mut selected_lang,
-                    tag.to_owned(),
-                    format!("{tag} — {label}"),
-                );
-            }
-        });
-    ui.ctx().accesskit_node_builder(combo.response.id, |node| {
-        node.set_label("Document Language");
-    });
+    let entries: Vec<Entry<String>> = SUPPORTED_LANGUAGES
+        .iter()
+        .map(|(tag, label)| {
+            Entry::new((*tag).to_owned(), format!("{tag} — {label}"))
+                .closed_label(format!("Lang: {tag}"))
+        })
+        .collect();
+    Select::new(
+        "Document Language",
+        Bind::bound(&mut selected_lang),
+        &entries,
+    )
+    .show(ui);
     if selected_lang != current_lang {
         app.set_language(&selected_lang);
     }
@@ -141,21 +141,16 @@ impl LiveTranslateChoice {
 pub(crate) fn show_live_translate_selector(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
     let current = LiveTranslateChoice::from_app(app);
     let mut selected = current;
-    let combo = egui::ComboBox::from_id_salt(ui.scope_id().with("live_translate_selector"))
-        .selected_text(current.button_text())
-        .show_ui(ui, |ui| {
-            for choice in [
-                LiveTranslateChoice::Off,
-                LiveTranslateChoice::En,
-                LiveTranslateChoice::PtBr,
-                LiveTranslateChoice::Es,
-            ] {
-                ui.selectable_value(&mut selected, choice, choice.option_label());
-            }
-        });
-    ui.ctx().accesskit_node_builder(combo.response.id, |node| {
-        node.set_label("Live Translate");
-    });
+    let entries = [
+        LiveTranslateChoice::Off,
+        LiveTranslateChoice::En,
+        LiveTranslateChoice::PtBr,
+        LiveTranslateChoice::Es,
+    ]
+    .map(|choice| Entry::new(choice, choice.option_label()).closed_label(choice.button_text()));
+    Select::new("Live Translate", Bind::bound(&mut selected), &entries)
+        .id_salt(ui.scope_id().with("live_translate_selector"))
+        .show(ui);
     if selected != current {
         match selected {
             LiveTranslateChoice::Off => {

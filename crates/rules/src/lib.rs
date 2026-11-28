@@ -13,6 +13,7 @@ mod grammar_deep;
 mod inclusive_formality;
 mod proof_adapter;
 mod scoring;
+pub mod segmentation;
 pub mod similarity;
 mod style_guide_eval;
 mod tone;
@@ -117,7 +118,7 @@ impl AnalysisEngine {
         let guide_hash = hash_style_guide(style_guide);
         let mut issue_list = IssueList::new();
 
-        for (para_start, para_text) in paragraph_slices(text) {
+        for (para_start, para_text) in segmentation::paragraph_slices(text) {
             let key = paragraph_cache_key(para_text, &canonical_tag, goals, dict_gen, guide_hash);
             let findings = self.cached_or_compute(key, para_text, proof_lang, goals, style_guide);
             for finding in findings {
@@ -210,25 +211,6 @@ fn is_suppressed(
     }
     let key = IgnoredIssueKey::new(finding.rule_id, abs_start, snippet)?;
     Ok(ignored.is_ignored(&key))
-}
-
-fn paragraph_slices(text: &str) -> Vec<(usize, &str)> {
-    let mut slices = Vec::new();
-    let mut offset = 0usize;
-    for raw_line in text.split_inclusive('\n') {
-        let trimmed = raw_line.trim_end_matches(['\r', '\n']);
-        if !trimmed.trim().is_empty() {
-            slices.push((offset, trimmed));
-        }
-        offset = offset.saturating_add(raw_line.len());
-    }
-    if offset < text.len()
-        && let Some(tail) = text.get(offset..)
-        && !tail.trim().is_empty()
-    {
-        slices.push((offset, tail));
-    }
-    slices
 }
 
 fn hash_style_guide(style_guide: &StyleGuide) -> u64 {

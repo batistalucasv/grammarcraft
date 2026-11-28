@@ -12,4 +12,5 @@ workspace = true
 [dependencies]
 grammarcraft-core = { workspace = true }
 craft-proof = { workspace = true }
+craft-text = { workspace = true }
 regex = { workspace = true }

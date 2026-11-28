@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Hardened-runtime entitlements for GrammarCraft. Deliberately empty: the app is pure Rust,
+     loads no unsigned code, needs no JIT (local inference runs via pure-Rust rten), and is not
+     sandboxed so it can open files by path from the CLI, Quick Review, and drag-and-drop. Add
+     exceptions here only with a documented reason in a comment. -->
+<plist version="1.0">
+<dict>
+</dict>
+</plist>

@@ -415,3 +415,80 @@ fn hotkey_overlay_validates_binding_and_triggers_overlay_with_mock_once() {
     assert_eq!(parsed["action"], "overlay");
     assert_eq!(parsed["overlay"]["text"], "Teh draft.");
 }
+
+#[test]
+fn check_and_quick_review_support_sarif_and_text_formats() {
+    let base = std::env::temp_dir().join(format!("gc-cli-sarif-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("temp dir");
+    let file = base.join("sample.txt");
+    std::fs::write(&file, "First line stays clear.\nSecond line has Teh error.")
+        .expect("seed file");
+
+    let sarif_out = cli(&["check", &file.to_string_lossy(), "--format", "sarif"]);
+    assert!(
+        sarif_out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&sarif_out.stderr)
+    );
+    let sarif: serde_json::Value =
+        serde_json::from_slice(&sarif_out.stdout).expect("valid SARIF JSON");
+    assert_eq!(sarif["version"], "2.1.0");
+    assert!(
+        sarif["$schema"]
+            .as_str()
+            .is_some_and(|s| s.contains("sarif"))
+    );
+    assert_eq!(sarif["runs"][0]["tool"]["driver"]["name"], "GrammarCraft");
+    let results = sarif["runs"][0]["results"]
+        .as_array()
+        .expect("results array");
+    assert!(!results.is_empty());
+    let first_region = &results[0]["locations"][0]["physicalLocation"]["region"];
+    assert_eq!(first_region["startLine"], 2);
+    assert!(first_region["startColumn"].as_u64().is_some_and(|c| c >= 1));
+    assert!(first_region["endLine"].as_u64().is_some_and(|l| l >= 2));
+    assert!(first_region["endColumn"].as_u64().is_some_and(|c| c >= 1));
+    assert!(first_region["byteOffset"].as_u64().is_some());
+    assert!(first_region["byteLength"].as_u64().is_some_and(|n| n >= 1));
+
+    let text_out = cli(&["check", &file.to_string_lossy(), "--format=text"]);
+    let _ = std::fs::remove_dir_all(&base);
+    assert!(
+        text_out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&text_out.stderr)
+    );
+    let text_str = String::from_utf8_lossy(&text_out.stdout);
+    assert!(text_str.contains("GrammarCraft report"), "{text_str}");
+    assert!(text_str.contains(":2:"), "{text_str}");
+
+    let qr_sarif = cli(&[
+        "quick-review",
+        "--text",
+        "We need less steps.",
+        "--format",
+        "sarif",
+    ]);
+    assert!(qr_sarif.status.success());
+    let qr_parsed: serde_json::Value =
+        serde_json::from_slice(&qr_sarif.stdout).expect("valid quick-review SARIF");
+    assert_eq!(qr_parsed["version"], "2.1.0");
+    assert!(
+        qr_parsed["runs"][0]["results"]
+            .as_array()
+            .is_some_and(|r| r.iter().any(|res| res["ruleId"] == "grammar.less_vs_fewer"))
+    );
+
+    let qr_text = cli(&[
+        "quick-review",
+        "--text",
+        "We need less steps.",
+        "--format=text",
+    ]);
+    assert!(qr_text.status.success());
+    assert!(String::from_utf8_lossy(&qr_text.stdout).contains("grammar.less_vs_fewer"));
+
+    let bad_fmt = cli(&["quick-review", "--text", "Ok.", "--format", "xml"]);
+    assert_eq!(bad_fmt.status.code(), Some(2));
+}
