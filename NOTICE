@@ -16,6 +16,8 @@ This repository links:
   (MIT OR Apache-2.0);
 - `sha2` (`0.10`, `MIT OR Apache-2.0`) from crates.io for streaming SHA-256 verification of local
   model weight files before loading;
+- `rten` and `rten-tensor` (`=0.28.0`, `MIT OR Apache-2.0`) from crates.io for pure-Rust local ONNX
+  model execution in `RtenTextModelRunner`;
 - Craft's `storytold/egui` fork (`932a73b28560acb1a695533307b2cd0d66a42081`, MIT OR Apache-2.0) and
   `storytold/winit` fork (`a517b3846ee8457d84ee4975110bfda6797c44dc`, Apache-2.0).
 
