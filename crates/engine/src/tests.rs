@@ -723,3 +723,166 @@ fn ai_native_consent_history_and_memory_secrets_persist_in_isolated_dir() {
 
     let _ = std::fs::remove_dir_all(&base);
 }
+
+#[test]
+fn local_model_runner_verifies_sha256_and_takes_precedence_over_fallback_and_cloud() {
+    use craft_ai_client::{LoadedModel, ModelRunner, RunContext};
+    use craft_ai_core::{
+        AiError, CapabilityId, CapabilitySpec, InputRole, ModelId, ModelInfo, Output, Payload,
+        Request,
+    };
+    use sha2::{Digest, Sha256};
+    use std::fmt::Write as _;
+    use std::path::Path;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    struct TestLoadedModel {
+        runs: Arc<AtomicUsize>,
+    }
+
+    impl LoadedModel for TestLoadedModel {
+        fn run(&mut self, request: &Request, _ctx: &RunContext) -> Result<Vec<Output>, AiError> {
+            self.runs.fetch_add(1, Ordering::AcqRel);
+            let prompt = request
+                .inputs
+                .iter()
+                .find(|input| input.role == InputRole::Prompt)
+                .and_then(|input| match &input.payload {
+                    Payload::Text { text } => Some(text.as_str()),
+                    _ => None,
+                })
+                .unwrap_or("");
+            let rewritten = if prompt.contains("draft") {
+                "Refined by local ModelRunner.".to_owned()
+            } else {
+                "Local runner output.".to_owned()
+            };
+            Ok(vec![Output {
+                payload: Payload::text(rewritten),
+                label: None,
+            }])
+        }
+
+        fn memory_bytes(&self) -> Option<u64> {
+            Some(64 * 1024 * 1024)
+        }
+    }
+
+    struct TestRunner {
+        loads: Arc<AtomicUsize>,
+        runs: Arc<AtomicUsize>,
+    }
+
+    impl ModelRunner for TestRunner {
+        fn engine(&self) -> &str {
+            "candle"
+        }
+
+        fn model(&self) -> ModelInfo {
+            let cap = CapabilityId::parse("text.complete").expect("valid cap");
+            ModelInfo::new(
+                ModelId::new("grammar-rewrite-mini").expect("valid model id"),
+                "Grammar Rewrite Mini",
+            )
+            .with(
+                CapabilitySpec::new(cap)
+                    .accepting(InputRole::System, 1)
+                    .accepting(InputRole::Prompt, 1)
+                    .requiring(InputRole::Prompt),
+            )
+        }
+
+        fn load(&self, _weights: &Path) -> Result<Box<dyn LoadedModel>, AiError> {
+            self.loads.fetch_add(1, Ordering::AcqRel);
+            Ok(Box::new(TestLoadedModel {
+                runs: Arc::clone(&self.runs),
+            }))
+        }
+    }
+
+    let base = std::env::temp_dir().join(format!("gc-local-runner-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("temp dir");
+    let weights_path = base.join("model.bin");
+    let payload = b"clean-room-test-weights-v1";
+    std::fs::write(&weights_path, payload).expect("write dummy weights");
+
+    let mut hex_sha = String::with_capacity(64);
+    for b in Sha256::digest(payload) {
+        let _ = write!(hex_sha, "{b:02x}");
+    }
+
+    let loads = Arc::new(AtomicUsize::new(0));
+    let runs = Arc::new(AtomicUsize::new(0));
+    let runner = Arc::new(TestRunner {
+        loads: Arc::clone(&loads),
+        runs: Arc::clone(&runs),
+    });
+
+    let mut session = Session::new();
+    session
+        .register_local_runner(runner, weights_path.clone(), Some(hex_sha))
+        .expect("register local runner");
+
+    let status = run(&mut session, "ai.status", json!({})).expect("ai.status");
+    assert_eq!(status["local_engines"], json!(["candle"]));
+
+    run(
+        &mut session,
+        "doc.set_text",
+        json!({"text": "Initial draft sentence."}),
+    )
+    .expect("set text");
+
+    // Local ModelRunner must be chosen automatically ahead of deterministic offline fallback.
+    let first = run(&mut session, "ai.rewrite", json!({})).expect("first local runner rewrite");
+    assert_eq!(
+        first["proposal"]["proposed"],
+        "Refined by local ModelRunner."
+    );
+    assert_eq!(
+        first["proposal"]["provider_label"],
+        "local-engine:candle/grammar-rewrite-mini"
+    );
+    assert_eq!(loads.load(Ordering::Acquire), 1);
+    assert_eq!(runs.load(Ordering::Acquire), 1);
+
+    // Even when CloudConsentRequired is set without remote consent, registered local ModelRunner
+    // handles inference on-device without falling through to remote AI.
+    run(
+        &mut session,
+        "ai.consent",
+        json!({"granted": false, "locality": "cloud"}),
+    )
+    .expect("set cloud locality");
+    let second = run(&mut session, "ai.rewrite", json!({})).expect("second rewrite reuses cache");
+    assert_eq!(
+        second["proposal"]["proposed"],
+        "Refined by local ModelRunner."
+    );
+    assert_eq!(loads.load(Ordering::Acquire), 1, "model stays cached");
+    assert_eq!(runs.load(Ordering::Acquire), 2);
+
+    let loaded_info = session
+        .loaded_local_model_info()
+        .expect("loaded model info available");
+    assert_eq!(loaded_info.bytes, 64 * 1024 * 1024);
+    assert!(!loaded_info.estimated);
+
+    let unloaded = session.unload_local_model();
+    assert_eq!(unloaded.freed.len(), 1);
+    assert!(session.loaded_local_model_info().is_none());
+
+    // Tampered weights must be rejected by SHA-256 check BEFORE runner.load() is invoked.
+    std::fs::write(&weights_path, b"corrupted-weights").expect("corrupt weights");
+    let err = run(&mut session, "ai.rewrite", json!({})).expect_err("sha mismatch must fail");
+    assert!(err.to_string().contains("SHA-256 mismatch"));
+    assert_eq!(
+        loads.load(Ordering::Acquire),
+        1,
+        "load() not called on bad hash"
+    );
+
+    let _ = std::fs::remove_dir_all(&base);
+}
