@@ -1,17 +1,13 @@
 use std::sync::Arc;
 
-use craft::host::target::ShellInfo;
 use craft::host::{AppInfo, Host};
 use craft::theme::{
     AppSizes, Appearance, Contrast, Mode, ModeChoice, Rgba, Size, TextSize, ThemeDef, ThemeId,
     Tokens, builtins, resolve_sized,
 };
 use craft::theme_store::{Store, StoreOptions, SuiteDir};
-use craft::ui::InstallSpec;
-use craft::ui::fonts::{I18nScripts, UiFonts};
 use craft::ui::runtime::env::RootEnv;
 use craft::ui::runtime::frame::FrameInput;
-use craft::ui::testing::windows::NoWindows;
 use egui::{Color32, CornerRadius, Stroke, Visuals};
 use grammarcraft_core::{IssueCategory, Severity};
 
@@ -245,10 +241,16 @@ pub fn frame_input(mode: ThemeMode, host: Arc<Host>) -> FrameInput {
     FrameInput::new(root).host(host)
 }
 
-pub fn ui_fonts() -> UiFonts<'static> {
+#[cfg(test)]
+pub fn ui_fonts() -> craft::ui::fonts::UiFonts<'static> {
+    use craft::ui::fonts::{I18nScripts, UiFonts};
     UiFonts::new(&I18nScripts)
 }
 
-pub fn headless_install_spec() -> InstallSpec {
+#[cfg(test)]
+pub fn headless_install_spec() -> craft::ui::InstallSpec {
+    use craft::host::target::ShellInfo;
+    use craft::ui::InstallSpec;
+    use craft::ui::testing::windows::NoWindows;
     InstallSpec::new(ShellInfo::default(), Arc::new(NoWindows))
 }
