@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="GrammarCraft" Manufacturer="Learning Machines LLC" Version="$(var.Version)" UpgradeCode="E7C4B9A2-3D51-4F86-9E12-6A8C4B0D9F31" Scope="perUserOrMachine" Compressed="yes" Language="1033">
+    <SummaryInformation Description="GrammarCraft writing assistant and grammar checker" Manufacturer="Learning Machines LLC" />
+    <?include $(sys.SOURCEFILEDIR)install-policy.wxi?>
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of GrammarCraft is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="GrammarcraftIcon.exe" SourceFile="$(var.IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="GrammarcraftIcon.exe" />
+    <Property Id="ARPURLINFOABOUT" Value="https://getartcraft.com/apps/grammarcraft" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://getartcraft.com/apps/grammarcraft" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/storytold/grammarcraft/issues" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="CraftSuiteFolder" Name="ArtCraft">
+        <Directory Id="INSTALLFOLDER" Name="GrammarCraft" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <Feature Id="Main" Title="GrammarCraft" Level="1">
+      <ComponentGroupRef Id="GrammarcraftNotices" />
+      <ComponentGroupRef Id="GrammarcraftFiles" />
+    </Feature>
+
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <UI>
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="InstallDirDlg" Order="2" Condition="NOT Installed" />
+      <Publish Dialog="InstallDirDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="2" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchGrammarcraft" Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+    </UI>
+    <WixVariable Id="WixUIBannerBmp" Value="$(var.BannerBmp)" />
+    <WixVariable Id="WixUIDialogBmp" Value="$(var.DialogBmp)" />
+
+    <Property Id="GrammarcraftVersion" Value="$(var.DisplayVersion)" />
+
+    <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="GrammarCraft $(var.DisplayVersion) is installed. You can start it any time from the Start menu or with a .grammarcraft document." />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch GrammarCraft" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <Property Id="WixShellExecTarget" Value="[#GrammarcraftExe]" />
+    <CustomAction Id="LaunchGrammarcraft" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixShellExec" Impersonate="yes" Return="ignore" />
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="GrammarcraftNotices" Directory="INSTALLFOLDER">
+      <Files Include="$(var.DocsDir)\**" />
+    </ComponentGroup>
+    <ComponentGroup Id="GrammarcraftFiles" Directory="INSTALLFOLDER">
+      <Component Id="GrammarcraftApp" Guid="8B3F6D12-9C4A-4E21-B754-2F1E9D8C7A40">
+        <File Id="GrammarcraftExe" Source="$(var.BinDir)\grammarcraft.exe" KeyPath="yes">
+          <Shortcut Id="StartMenuShortcut" Directory="ProgramMenuFolder" Name="GrammarCraft" Description="GrammarCraft writing assistant and grammar checker" WorkingDirectory="INSTALLFOLDER" Advertise="yes" Icon="GrammarcraftIcon.exe" IconIndex="0" />
+        </File>
+
+        <ProgId Id="Grammarcraft.Document" Description="GrammarCraft Document" Icon="GrammarcraftExe" IconIndex="0">
+          <Extension Id="grammarcraft" ContentType="application/x-grammarcraft">
+            <Verb Id="open" Command="Open" TargetFile="GrammarcraftExe" Argument="&quot;%1&quot;" />
+          </Extension>
+        </ProgId>
+
+        <RegistryValue Root="HKMU" Key="Software\Classes\Applications\grammarcraft.exe" Name="FriendlyAppName" Value="GrammarCraft" Type="string" />
+        <RegistryValue Root="HKMU" Key="Software\Classes\Applications\grammarcraft.exe\shell\open\command" Value="&quot;[#GrammarcraftExe]&quot; &quot;%1&quot;" Type="string" />
+        <RegistryValue Root="HKMU" Key="Software\Classes\Applications\grammarcraft.exe\SupportedTypes" Name=".grammarcraft" Value="" Type="string" />
+        <RegistryValue Root="HKMU" Key="Software\Classes\Applications\grammarcraft.exe\SupportedTypes" Name=".txt" Value="" Type="string" />
+        <RegistryValue Root="HKMU" Key="Software\Classes\Applications\grammarcraft.exe\SupportedTypes" Name=".md" Value="" Type="string" />
+        <RegistryValue Root="HKMU" Key="Software\Classes\Applications\grammarcraft.exe\SupportedTypes" Name=".docx" Value="" Type="string" />
+        <RegistryValue Root="HKMU" Key="Software\Microsoft\Windows\CurrentVersion\App Paths\grammarcraft.exe" Value="[#GrammarcraftExe]" Type="string" />
+        <RegistryValue Root="HKMU" Key="Software\GrammarCraft" Name="InstallDir" Value="[INSTALLFOLDER]" Type="string" />
+      </Component>
+
+      <Component Id="GrammarcraftCli">
+        <File Id="GrammarcraftCliExe" Source="$(var.BinDir)\grammarcraft-cli.exe" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

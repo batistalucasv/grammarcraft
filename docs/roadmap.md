@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **M5 shared `release.yml` (PR #9), `EngineRegistry`/`ModelRunner` with `sha2` SHA-256 verification, decoupled `upstream_ready.rs` rules, and `craft::ui` widget migration implemented on `feat/local-ai-engine-and-polish` (PR #10 pending merge); concrete `rten` ONNX NLP runner, `release.yml` `dry-run`, macOS/Windows packaging, external upstream PRs (`craft-proof`/`craft-i18n`/`craft-ai-agents`), full `craft-design-lint` clearance, Rule 4 searches, and post-M5 OS overlay remain open.**
+Status: **Linux/Flatpak/Windows packaging scripts, 12 hicolor/ICO/1024px icons, and `grammarcraft-cli -V/--version` implemented on `feat/packaging-release-dryrun` (PR #12 pending merge); `release.yml` `dry-run` verification on `main`, `packaging/macos/`, concrete `rten` ONNX NLP runner, external upstream PRs (`craft-proof`/`craft-i18n`/`craft-ai-agents`), full `craft-design-lint` clearance, Rule 4 searches, and post-M5 OS overlay remain open.**
 
 A milestone is done only when every checkbox is verified in a fresh clone (and on GitHub Actions where noted), never when code is merely drafted.
 
@@ -20,7 +20,7 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 - [x] Implement `grammarcraft-rules` (L1) base pipeline wrapping `craft-proof` with per-paragraph incremental caching, per-document ignore/dictionary isolation, initial clarity/style rules, open readability metrics, `WritingScore`, and span-anchored `ToneProfile`
 - [x] Implement `grammarcraft-engine` (L2): `Session`, bounded undo/redo stack (`MAX_UNDO_STEPS = 200`), versioned atomic save/open (`.grammarcraft.json` v1, `.docx` via `craft-docx` + `craft-wordmodel`, `.txt`, `.md` via `craft-atomic`), and `AutomationRoots` file confinement (`file_access.rs`)
 - [x] Register initial `CommandSpec` catalog (`doc.*`, `history.*`, `goals.set`, `stats.measure`, `review.*`, `dict.*`) with `hostile_parameters_never_panic` passing 100%
-- [x] Ship `grammarcraft-cli` (`check`, `stats`, `run`, `commands`) + `grammarcraft-cli mcp` refusing startup without `--automation-read-root` and `--automation-write-root`
+- [x] Ship `grammarcraft-cli` (`check`, `stats`, `run`, `commands`, `-V`/`--version`) + `grammarcraft-cli mcp` refusing startup without `--automation-read-root` and `--automation-write-root`
 - [ ] Integrate `craft-text` UAX #14/#29 segmentation
 
 ## M2 — Deterministic writing & style engine
@@ -53,11 +53,11 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 
 ## M5 — Ecosystem integration, localization & release packaging
 
-- [x] Author English string catalog (`locales/en/grammarcraft.tsv`), original SVG icon (`assets/app-icon/grammarcraft.svg` attributed in `ATTRIBUTION.md`), Linux desktop packaging metadata (`packaging/README.md`, `packaging/linux/ai.storyteller.grammarcraft.{desktop,metainfo.xml.in}`), and `.github/workflows/release.yml` calling `storytold/craft-common-actions/.github/workflows/release.yml@main` (PR #9)
+- [x] Author English string catalog (`locales/en/grammarcraft.tsv`), original app icon + 11 derived hicolor/ICO/1024px assets (`assets/app-icon/` attributed in `ATTRIBUTION.md`), Linux/Flatpak/Windows packaging scripts (`packaging/{env.sh,check-icons.sh,linux/,windows/}`), and `.github/workflows/release.yml` calling `storytold/craft-common-actions/.github/workflows/release.yml@main` (with `workflow_dispatch` `dry-run` input)
 - [ ] Upstream `crates/rules/src/upstream_ready.rs` and reusable suggestion-card widgets to `craft-proof` / `craft-libs` (`wordcraft` integration PR)
 - [ ] Register `grammarcraft` in `craft-ai-agents` (`KNOWN_APPS`) for `craft-ai-mcp` launcher discovery
 - [ ] Coordinate translations in `storytold/craft-i18n` from `locales/en/grammarcraft.tsv`
-- [ ] Add macOS/Windows packaging assets and confirm green `dry-run` on `release.yml`
+- [ ] Add `packaging/macos/` assets and confirm green `dry-run` on `release.yml` on `main`
 
 ## Deliberately not planned (M0–M5)
 
@@ -77,4 +77,5 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 | 2026-11-27 | M3 | PR #5 merged (`ec52b11`, Linux UI packages in `ci.yml`); PR #6 merged (`8166126`): native `egui` desktop app (`apps/grammarcraft`), `storytold/egui` + `storytold/winit` pins, 5 `egui_kittest` + AccessKit tests |
 | 2026-11-27 | M4 | PR #7 merged (`6df24cd`): `craft-ai-core`/`craft-ai-openai`/`craft-ai-client`, `inclusive_formality.rs`, `similarity.rs`, 12 citation styles + BibTeX, 12 new commands (35 total), and `AI Assist` / `Citations & Similarity` desktop tabs (7 UI tests) |
 | 2026-11-27 | M5 | PR #8 merged (`a10f1f6`): `craft-ai-native` (`ConsentFile`, `HistoryFile`, `SecretStore`), loopback `--control`, `locales/en/grammarcraft.tsv`, `assets/app-icon/grammarcraft.svg`, `packaging/linux/*`; PR #9 merged (`a377174`): `.github/workflows/release.yml` |
-| 2026-11-27 | M2/M3/M4 | Added `EngineRegistry`/`ModelRunner` with `sha2` SHA-256 verification and `local_engines` status, `crates/rules/src/upstream_ready.rs` (`check_text`), and `craft::ui` (`Divider`, `Checkbox`, `TextField`, `gamma_multiply`) migration (`cargo xtask ci` green) |
+| 2026-11-27 | M2/M3/M4 | PR #10 merged (`b002e5e`): `EngineRegistry`/`ModelRunner` with `sha2` SHA-256 verification and `local_engines` status, `crates/rules/src/upstream_ready.rs` (`check_text`), and `craft::ui` (`Divider`, `Checkbox`, `TextField`, `gamma_multiply`); PR #11 merged (`449c02d`): `workflow_dispatch` `dry-run` input in `release.yml` |
+| 2026-11-27 | M5 | Added `-V`/`--version` to `grammarcraft-cli`, 11 derived hicolor/ICO/1024px icons in `assets/app-icon/` (`ATTRIBUTION.md` 12/12), `packaging/env.sh`, `check-icons.sh`, and Linux/Flatpak/Windows packaging scripts (`cargo xtask ci` green) |

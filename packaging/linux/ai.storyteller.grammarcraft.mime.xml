@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-grammarcraft">
+    <comment>GrammarCraft document</comment>
+    <sub-class-of type="application/json"/>
+    <icon name="ai.storyteller.grammarcraft"/>
+    <glob pattern="*.grammarcraft.json" weight="60"/>
+    <glob pattern="*.grammarcraft" weight="60"/>
+  </mime-type>
+</mime-info>
