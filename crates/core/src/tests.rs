@@ -2,13 +2,14 @@ use std::collections::BTreeMap;
 
 use crate::{
     AiDiffOp, Audience, CitationStyle, Confidence, Context, CoreError, Document, Formality,
-    IgnoredIssueKey, IgnoredIssueSet, IssueCategory, IssueId, IssueList, MAX_AI_TEXT_BYTES,
-    MAX_BIBTEX_BYTES, MAX_CUSTOM_FILE_BYTES, MAX_CUSTOM_WORDS, MAX_DOCUMENT_BYTES,
-    MAX_GOAL_VALUE_BYTES, MAX_IGNORED_ISSUES, MAX_ISSUES, MAX_RULE_PATTERN_BYTES,
-    MAX_SNIPPET_BYTES, MAX_SNIPPETS, MAX_STYLE_RULES, MAX_SUGGESTIONS_PER_ISSUE, MAX_TERM_BYTES,
-    PersonalDictionary, Purpose, Replacement, Severity, SnippetCatalog, StyleGuide, StyleRule,
-    StyleRuleKind, TextSpan, TextStats, WritingGoals, WritingScore, compute_word_diff,
-    format_bibliography, parse_bibtex_entries, validate_citations,
+    IgnoredIssueKey, IgnoredIssueSet, IssueCategory, IssueId, IssueList, LiveTranslationConfig,
+    MAX_AI_TEXT_BYTES, MAX_BIBTEX_BYTES, MAX_CUSTOM_FILE_BYTES, MAX_CUSTOM_WORDS,
+    MAX_DOCUMENT_BYTES, MAX_GOAL_VALUE_BYTES, MAX_IGNORED_ISSUES, MAX_ISSUES, MAX_LANG_TAG_BYTES,
+    MAX_RULE_PATTERN_BYTES, MAX_SNIPPET_BYTES, MAX_SNIPPETS, MAX_STYLE_RULES,
+    MAX_SUGGESTIONS_PER_ISSUE, MAX_TERM_BYTES, PersonalDictionary, Purpose, Replacement, Severity,
+    SnippetCatalog, StyleGuide, StyleRule, StyleRuleKind, TextSpan, TextStats, WritingGoals,
+    WritingScore, compute_word_diff, format_bibliography, parse_bibtex_entries, validate_citations,
+    validate_lang_tag,
 };
 
 #[test]
@@ -482,4 +483,24 @@ fn compute_word_diff_produces_equal_delete_and_insert_hunks_within_bounds() {
             max: MAX_AI_TEXT_BYTES
         })
     );
+}
+
+#[test]
+fn live_translation_config_validates_tags_and_defaults() {
+    assert_eq!(
+        validate_lang_tag(" pt-BR ", "target_lang"),
+        Ok("pt-BR".to_owned())
+    );
+    assert!(matches!(
+        validate_lang_tag("", "target_lang"),
+        Err(CoreError::InvalidLangTag { .. })
+    ));
+    let too_long = "e".repeat(MAX_LANG_TAG_BYTES + 1);
+    assert!(matches!(
+        validate_lang_tag(&too_long, "target_lang"),
+        Err(CoreError::InvalidLangTag { max, .. }) if max == MAX_LANG_TAG_BYTES
+    ));
+
+    let doc = Document::new();
+    assert_eq!(doc.live_translation, LiveTranslationConfig::default());
 }

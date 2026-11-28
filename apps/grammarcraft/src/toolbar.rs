@@ -46,6 +46,7 @@ pub fn show(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
 
         Divider::vertical().show(ui);
         show_language_selector(app, ui);
+        show_live_translate_selector(app, ui);
 
         let theme_label = format!("Theme: {}", app.theme_mode.label());
         if craft_button(ui, theme_label, true).clicked() {
@@ -91,6 +92,80 @@ fn show_language_selector(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
     });
     if selected_lang != current_lang {
         app.set_language(&selected_lang);
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LiveTranslateChoice {
+    Off,
+    En,
+    PtBr,
+    Es,
+}
+
+impl LiveTranslateChoice {
+    fn from_app(app: &GrammarCraftApp) -> Self {
+        let cfg = &app.session.doc().live_translation;
+        if !cfg.enabled {
+            return Self::Off;
+        }
+        let lower = cfg.target_lang.to_ascii_lowercase();
+        if lower.starts_with("pt") {
+            Self::PtBr
+        } else if lower.starts_with("es") {
+            Self::Es
+        } else {
+            Self::En
+        }
+    }
+
+    const fn button_text(self) -> &'static str {
+        match self {
+            Self::Off => "Live: Off",
+            Self::En => "Live: EN",
+            Self::PtBr => "Live: PT-BR",
+            Self::Es => "Live: ES",
+        }
+    }
+
+    const fn option_label(self) -> &'static str {
+        match self {
+            Self::Off => "Off",
+            Self::En => "EN",
+            Self::PtBr => "PT-BR",
+            Self::Es => "ES",
+        }
+    }
+}
+
+pub(crate) fn show_live_translate_selector(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
+    let current = LiveTranslateChoice::from_app(app);
+    let mut selected = current;
+    let combo = egui::ComboBox::from_id_salt(ui.scope_id().with("live_translate_selector"))
+        .selected_text(current.button_text())
+        .show_ui(ui, |ui| {
+            for choice in [
+                LiveTranslateChoice::Off,
+                LiveTranslateChoice::En,
+                LiveTranslateChoice::PtBr,
+                LiveTranslateChoice::Es,
+            ] {
+                ui.selectable_value(&mut selected, choice, choice.option_label());
+            }
+        });
+    ui.ctx().accesskit_node_builder(combo.response.id, |node| {
+        node.set_label("Live Translate");
+    });
+    if selected != current {
+        match selected {
+            LiveTranslateChoice::Off => {
+                let keep_target = app.session.doc().live_translation.target_lang.clone();
+                app.set_live_translation(false, &keep_target);
+            }
+            LiveTranslateChoice::En => app.set_live_translation(true, "en"),
+            LiveTranslateChoice::PtBr => app.set_live_translation(true, "pt-BR"),
+            LiveTranslateChoice::Es => app.set_live_translation(true, "es"),
+        }
     }
 }
 

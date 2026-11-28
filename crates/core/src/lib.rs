@@ -29,6 +29,7 @@ mod similarity;
 mod snippets;
 mod stats;
 mod style_guide;
+mod translate;
 
 pub use ai::{
     AiConsentStatus, AiDiffHunk, AiDiffOp, AiLocalityMode, AiMode, AiProposal, MAX_AI_TEXT_BYTES,
@@ -63,6 +64,9 @@ pub use snippets::{
 pub use stats::TextStats;
 pub use style_guide::{
     MAX_RULE_PATTERN_BYTES, MAX_STYLE_RULES, StyleGuide, StyleRule, StyleRuleKind,
+};
+pub use translate::{
+    LiveTranslationConfig, MAX_LANG_TAG_BYTES, TranslationResult, validate_lang_tag,
 };
 
 #[cfg(test)]

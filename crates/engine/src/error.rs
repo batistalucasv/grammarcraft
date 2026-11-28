@@ -27,6 +27,7 @@ impl From<CoreError> for CmdError {
             | CoreError::InvalidSpan { .. }
             | CoreError::NonCharBoundary { .. }
             | CoreError::InvalidGoal { .. }
+            | CoreError::InvalidLangTag { .. }
             | CoreError::EmptyTerm
             | CoreError::TermTooLong { .. }
             | CoreError::InvalidTerm(_)

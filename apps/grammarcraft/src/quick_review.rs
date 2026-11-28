@@ -68,6 +68,7 @@ fn show_header(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
         if craft_button(ui, "Undo", app.session.can_undo()).clicked() {
             app.undo();
         }
+        crate::toolbar::show_live_translate_selector(app, ui);
     });
 }
 

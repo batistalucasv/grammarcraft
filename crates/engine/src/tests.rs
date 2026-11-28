@@ -59,9 +59,13 @@ fn the_registry_reports_every_command() {
         "snippet.remove",
         "snippet.expand",
         "snippet.list",
+        "translate.configure",
+        "translate.live",
+        "translate.status",
     ] {
         assert!(ids.contains(&expected), "missing `{expected}` in {ids:?}");
     }
+    assert_eq!(ids.len(), 39);
     assert_eq!(ids.len(), registry().all().len());
 }
 
@@ -904,4 +908,114 @@ fn review_apply_all_fixes_non_overlapping_issues_atomically_with_undo() {
     // Single atomic undo restores the full document before apply_all.
     run(&mut session, "history.undo", json!({})).expect("single undo");
     assert_eq!(session.doc().text(), original);
+}
+
+#[test]
+fn live_translation_offline_translates_and_applies_with_atomic_undo() {
+    let v1_doc: grammarcraft_core::Document =
+        serde_json::from_str(r#"{"text":"Hello."}"#).expect("v1 document JSON deserializes");
+    assert_eq!(v1_doc.text(), "Hello.");
+    assert_eq!(
+        v1_doc.live_translation,
+        grammarcraft_core::LiveTranslationConfig::default()
+    );
+
+    let mut session = Session::new();
+    let cfg = run(
+        &mut session,
+        "translate.configure",
+        json!({ "enabled": true, "target_lang": "en" }),
+    )
+    .expect("configure live translate");
+    assert_eq!(cfg["enabled"], true);
+    assert_eq!(cfg["target_lang"], "en");
+
+    let status = run(&mut session, "translate.status", json!({})).expect("status");
+    assert_eq!(status["enabled"], true);
+    assert_eq!(status["cloud_consent_granted"], false);
+
+    run(
+        &mut session,
+        "doc.set_text",
+        json!({ "text": "Olá, bom dia." }),
+    )
+    .expect("set text");
+    let res =
+        run(&mut session, "translate.live", json!({ "apply": true })).expect("live translate");
+    assert_eq!(res["translated_text"], "Hello, good morning.");
+    assert_eq!(res["backend"], "local-offline");
+    assert_eq!(res["applied"], true);
+    assert_eq!(session.doc().text(), "Hello, good morning.");
+
+    run(&mut session, "history.undo", json!({})).expect("undo translation");
+    assert_eq!(session.doc().text(), "Olá, bom dia.");
+}
+
+#[test]
+fn live_translation_remote_provider_requires_consent_and_uses_mock_provider() {
+    use std::sync::Arc;
+
+    use craft_ai_core::mock::{MockProvider, Outcome, Script};
+    use craft_ai_core::{
+        CapabilityId, CapabilitySpec, InputRole, ModelId, ModelInfo, Output, Payload,
+    };
+
+    let mut session = Session::new();
+    let model_id = ModelId::new("mock-translator").expect("valid model id");
+    let spec = CapabilitySpec::new(CapabilityId::parse("text.complete").expect("cap"))
+        .accepting(InputRole::System, 1)
+        .accepting(InputRole::Prompt, 1);
+    let provider = Arc::new(MockProvider::new(
+        vec![ModelInfo::new(model_id, "Mock Translator").with(spec)],
+        Script {
+            running_polls: 0,
+            text_chunks: Vec::new(),
+            outcome: Outcome::Succeed(vec![Output {
+                payload: Payload::text("Predictable maintenance is ensured by modularity."),
+                label: None,
+            }]),
+        },
+    ));
+    session
+        .set_cloud_provider("mock-translator", provider)
+        .expect("wire mock provider");
+    run(
+        &mut session,
+        "translate.configure",
+        json!({ "enabled": true, "target_lang": "en" }),
+    )
+    .expect("configure live translate");
+    run(
+        &mut session,
+        "doc.set_text",
+        json!({ "text": "A modularidade garante manutenção previsível." }),
+    )
+    .expect("set text");
+
+    let blocked = run(&mut session, "translate.live", json!({ "apply": false }))
+        .expect_err("uncached sentence requires remote consent");
+    assert!(matches!(blocked, CmdError::Disabled(m) if m.contains("consent")));
+
+    run(
+        &mut session,
+        "ai.consent",
+        json!({ "granted": true, "locality": "cloud" }),
+    )
+    .expect("grant consent");
+    let res = run(&mut session, "translate.live", json!({ "apply": true }))
+        .expect("consented remote translation succeeds");
+    assert_eq!(
+        res["translated_text"],
+        "Predictable maintenance is ensured by modularity."
+    );
+    assert_eq!(
+        session.doc().text(),
+        "Predictable maintenance is ensured by modularity."
+    );
+
+    run(&mut session, "history.undo", json!({})).expect("undo remote translation");
+    assert_eq!(
+        session.doc().text(),
+        "A modularidade garante manutenção previsível."
+    );
 }

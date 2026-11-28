@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **M0–M5 complete and M6 OS context-menu hooks / `quick-review` CLI (`--text`, `--file`, `--stdin`, `--apply-all`) / `--quick-review --file` / `Apply All & Copy` / `Escape` implemented on `feat/m6-os-context-menu-and-quick-review` (PR #15 pending merge); direct `UIA`/`AXUIElement`/`AT-SPI2` overlay, `storytold/craft-libs#3975` → `wordcraft`, RFC-gated browser extension, live input translation (`translate.live`), `packaging/macos/`, and Rule 4 searches remain open.**
+Status: **M0–M5 complete and M6-3 real-time live translation (`LiveTranslationConfig`/`TranslationResult`, `LocalOfflineTranslator` `pt`/`en`/`es`, `translate_with_cloud` under `ConsentLedger`, `translate.configure`/`translate.live`/`translate.status` — 39 commands, `native-messaging` allowlist, and `Live Translate` UI selector) implemented on `feat/m6-3-live-translation` (PR #16 pending merge); direct `UIA`/`AXUIElement`/`AT-SPI2` overlay, `storytold/craft-libs#3975` → `wordcraft`, RFC-gated browser extension, dedicated neural ONNX translation/NLP weights, `packaging/macos/`, and Rule 4 searches remain open.**
 
 A milestone is done only when every checkbox is verified in a fresh clone (and on GitHub Actions where noted), never when code is merely drafted.
 
@@ -16,10 +16,10 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 
 ## M1 — Core domain, persistence, undo/redo & confined CLI/MCP
 
-- [x] Replace `Note` example with `grammarcraft-core` (L0): `Document`, UTF-8-safe `TextSpan`, `WritingGoals`, `TextStats`, `IssueId`, `IssueCategory`, `Severity`, `Confidence`, `Replacement`, `Issue`, `IssueList`, `ReadabilityMetrics`, `WritingScore`, `ToneProfile`, `PersonalDictionary`, `IgnoredIssueSet`, `CoreError`, and `MAX_*` bounds (zero I/O / zero `serde_json` / zero panics)
+- [x] Replace `Note` example with `grammarcraft-core` (L0): `Document`, UTF-8-safe `TextSpan`, `WritingGoals`, `LiveTranslationConfig`, `TranslationResult`, `TextStats`, `IssueId`, `IssueCategory`, `Severity`, `Confidence`, `Replacement`, `Issue`, `IssueList`, `ReadabilityMetrics`, `WritingScore`, `ToneProfile`, `PersonalDictionary`, `IgnoredIssueSet`, `CoreError`, and `MAX_*` bounds (zero I/O / zero `serde_json` / zero panics)
 - [x] Implement `grammarcraft-rules` (L1) base pipeline wrapping `craft-proof` with per-paragraph incremental caching, per-document ignore/dictionary isolation, initial clarity/style rules, open readability metrics, `WritingScore`, and span-anchored `ToneProfile`
 - [x] Implement `grammarcraft-engine` (L2): `Session`, bounded undo/redo stack (`MAX_UNDO_STEPS = 200`), versioned atomic save/open (`.grammarcraft.json` v1, `.docx` via `craft-docx` + `craft-wordmodel`, `.txt`, `.md` via `craft-atomic`), and `AutomationRoots` file confinement (`file_access.rs`)
-- [x] Register `CommandSpec` catalog (`doc.*`, `history.*`, `goals.set`, `stats.measure`, `review.*` incl. `review.apply_all`, `dict.*`, `style.*`, `snippet.*`, `ai.*`, `similarity.check`, `citations.*` — 36 commands) with `hostile_parameters_never_panic` passing 100%
+- [x] Register `CommandSpec` catalog (`doc.*`, `history.*`, `goals.set`, `stats.measure`, `review.*` incl. `review.apply_all`, `dict.*`, `style.*`, `snippet.*`, `ai.*`, `similarity.check`, `citations.*`, `translate.*` — 39 commands) with `hostile_parameters_never_panic` passing 100%
 - [x] Ship `grammarcraft-cli` (`check`, `quick-review`, `stats`, `run`, `commands`, `-V`/`--version`, `native-messaging`) + `grammarcraft-cli mcp` refusing startup without `--automation-read-root` and `--automation-write-root`
 - [ ] Integrate `craft-text` UAX #14/#29 segmentation
 
@@ -34,11 +34,11 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 
 ## M3 — Native `egui` desktop app & accessibility
 
-- [x] Build `apps/grammarcraft` using `craft` (`ui`, `ui-app`, `theme-store`, `dialogs`, `automation`; `craft::ui::shell::app::{AppSpec, run}`) with light/dark themes (`gamma_multiply`), native file dialogs, and floating `--quick-review` mode (`460x540`, `AlwaysOnTop`, `--text`, `--file`, `--from-clipboard`, `Apply All`, `Apply All & Copy`, `Paste & Review`, `Copy Text`, `Escape` focus-trap-free dismissal)
+- [x] Build `apps/grammarcraft` using `craft` (`ui`, `ui-app`, `theme-store`, `dialogs`, `automation`; `craft::ui::shell::app::{AppSpec, run}`) with light/dark themes (`gamma_multiply`), native file dialogs, floating `--quick-review` mode (`460x540`, `AlwaysOnTop`, `--text`, `--file`, `--from-clipboard`, `Apply All`, `Apply All & Copy`, `Paste & Review`, `Copy Text`, `Escape`), and `Live Translate` (`Off | EN | PT-BR | ES`)
 - [x] Migrate toolbar, sidebar, and theme bridge controls to `craft::ui::display::Divider`, `craft::ui::choice::Checkbox`, and `craft::ui::text::TextField` (`Bind::bound`)
 - [x] Render category underlines with redundant encoding (theme colour + distinct stroke pattern + `[!]`/`[~]`/`[i]` severity markers) and interactive suggestion cards
 - [x] Build bidirectional Review Pane (`Alerts`, `Goals & Score`, `Tone Profile`, `Style & Snippets`, `AI Assist`, `Citations & Similarity`) routing every mutation strictly via `Session::run`
-- [x] Verify keyboard navigation (`Tab`/`Shift+Tab`/`F6`/`Escape`), active AccessKit tree, and 10 headless `egui_kittest` / control tests
+- [x] Verify keyboard navigation (`Tab`/`Shift+Tab`/`F6`/`Escape`), active AccessKit tree, and 11 headless `egui_kittest` / control tests
 - [x] Enable authenticated `craft/automation` loopback `--control` channel (`ControlOptions` + `serve` + `ControlChannel` with `--automation-read-root`/`--automation-write-root` confinement and rejection/dispatch tests)
 - [ ] Replace remaining `egui::ComboBox` / `TextEdit::multiline` instances where supported and pass `craft-design-lint` 100%
 
@@ -49,22 +49,22 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 - [x] Integrate `EngineRegistry`/`ModelRunner` (`craft-ai-engine` via `craft-ai-client`) with streaming `sha2::Sha256` weight verification before `load()`, automatic local precedence, and `local_engines` in `ai.status`
 - [x] Ship `ai.status`, `ai.consent`, `ai.rewrite`, `ai.adjustTone`, `ai.summarize`, `ai.expand`, `ai.draft`, `ai.applyResult`, `ai.discardResult` with word-level `AiDiffHunk` preview, `AI Assist` UI tab, and atomic single-step undo
 - [x] Ship local N-gram/Jaccard `Similarity Check` (`similarity.check` confined by `AutomationRoots`) and 12-style citation validation/formatting (`BibTeX` parser + `citations.validate`/`citations.format` + `Citations & Similarity` UI tab)
-- [ ] Wire a concrete `craft-ai-engine-rten` / `craft-ai-engine-candle` NLP/tone/GEC `ModelRunner` with permissive open weights downloaded on demand under SHA-256 verification
+- [ ] Wire a concrete `craft-ai-engine-rten` / `craft-ai-engine-candle` NLP/tone/GEC/neural-translation `ModelRunner` with permissive open weights downloaded on demand under SHA-256 verification
 
 ## M5 — Ecosystem integration, localization & release packaging
 
 - [x] Author English string catalog (`locales/en/grammarcraft.tsv`), original app icon + 11 derived hicolor/ICO/1024px assets (`assets/app-icon/` attributed in `ATTRIBUTION.md`), Linux/Flatpak/Windows packaging scripts (`packaging/{env.sh,check-icons.sh,linux/,windows/}`), and `.github/workflows/release.yml`
 - [x] Confirm green `release.yml` `dry-run=true` on `main` across Linux x86_64/aarch64, Windows x64/arm64, and Flatpak x86_64/aarch64 (run `46092799920`)
-- [x] Ship WebExtension stdio `grammarcraft-cli native-messaging` host (4-byte LE `u32` framing, `MAX_NATIVE_MESSAGE_BYTES = 1 MiB`, safe allowlist) as the pure-Rust backend for browser integration
+- [x] Ship WebExtension stdio `grammarcraft-cli native-messaging` host (4-byte LE `u32` framing, `MAX_NATIVE_MESSAGE_BYTES = 1 MiB`, safe allowlist incl. `translate.*`) as the pure-Rust backend for browser integration
 - [ ] Add `packaging/macos/` assets, coordinate translations in `storytold/craft-i18n`, and register `grammarcraft` in `craft-ai-agents` (`KNOWN_APPS`)
 
 ## M6+ — OS context menu & overlay, full WordCraft integration, browser extension & live translation
 
 - [x] **OS Context-Menu Hooks & Quick Review CLI:** `grammarcraft-cli quick-review` (`--text`, `--file`, `--stdin`, `--lang`, `--audience`, `--formality`, `--apply-all`), desktop `--quick-review --file <PATH>`, `Apply All & Copy`, `Escape`, Linux XDG/Dolphin/Nautilus hooks (`packaging/linux/ai.storyteller.grammarcraft.quick-review.desktop`, `install-quick-review.sh`), and per-user Windows Explorer context-menu registration (`packaging/windows/register-context-menu.ps1`)
-- [ ] **Direct OS Accessibility Overlay:** global hotkey daemon and direct capture/replacement via `UIA` (Windows), `AXUIElement` (macOS), and `AT-SPI2` (Linux) in pure Rust (`unsafe` isolated outside L0–L2, zero JS/Electron/webview)
-- [ ] **Full `WordCraft` Integration:** merge `storytold/craft-libs#3975` (`craft-proof` upstreaming), bump `craft-proof` in `wordcraft`, and integrate clarity, contextual paronyms, tone, and readability natively in `wordcraft`
+- [x] **Live Input Translation Core & Desktop UI (`translate.live`):** `LiveTranslationConfig` / `TranslationResult` in `core`, `LocalOfflineTranslator` (`pt`/`en`/`es`) + `translate_with_cloud` under `ConsentLedger` with atomic undo (`translate.configure`, `translate.live`, `translate.status`), `native-messaging` allowlist, and `Live Translate` (`Off | EN | PT-BR | ES`) selector in main toolbar and `--quick-review` triggering on sentence completion with immediate `Undo`
+- [ ] **Direct OS Accessibility Overlay:** global hotkey daemon and direct capture/replacement (extending review and `translate.live` to unintegrated external apps) via `UIA` (Windows), `AXUIElement` (macOS), and `AT-SPI2` (Linux) in pure Rust (`unsafe` isolated outside L0–L2, zero JS/Electron/webview)
+- [ ] **Full `WordCraft` Integration:** merge `storytold/craft-libs#3975` (`craft-proof` upstreaming), bump `craft-proof` in `wordcraft`, and integrate clarity, contextual paronyms, tone, readability, and live translation natively in `wordcraft`
 - [ ] **Browser Extension (WASM + Native Messaging):** open RFC in `storytold/craft-contrib` (Rule 11) for a minimal browser extension shim consuming `grammarcraft-cli native-messaging` and the `wasm32` `grammarcraft-core`/`grammarcraft-rules` kernel
-- [ ] **Live Input Translation (`translate.live`):** optional real-time typing translation mode across supported apps, `WordCraft`, and browser translating typed input into the chosen target language via the consent-gated hybrid AI pipeline (`ConsentLedger`)
 
 ## Deliberately not planned (without dedicated RFC)
 
@@ -87,4 +87,5 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 | 2026-11-27 | M2/M3/M4 | PR #10 merged (`b002e5e`): `EngineRegistry`/`ModelRunner` with `sha2` SHA-256 verification and `local_engines` status, `crates/rules/src/upstream_ready.rs` (`check_text`), and `craft::ui` (`Divider`, `Checkbox`, `TextField`, `gamma_multiply`) migration; PR #11 merged (`449c02d`): `workflow_dispatch` `dry-run` input in `release.yml` |
 | 2026-11-27 | M5 | PR #12 merged (`0af3dbf`): `-V`/`--version` in `grammarcraft-cli`, 12 app icons in `assets/app-icon/` (`ATTRIBUTION.md`), `packaging/env.sh`, `check-icons.sh`, Linux/Flatpak/Windows packaging scripts; PR #13 merged (`38c5d29`) and `release.yml` `dry-run=true` passed on `main` (run `46092799920`) |
 | 2026-11-27 | M3/M5/M6 prep | PR #14 merged (`9bcc4f3`): `review.apply_all` (36 commands), floating `--quick-review` mode, `grammarcraft-cli native-messaging`, `wasm32-unknown-unknown` verification of `core`/`rules`, and M6+ roadmap |
-| 2026-11-27 | M6-2 | Added `grammarcraft-cli quick-review` (`--text`, `--file`, `--stdin`, goals, `--apply-all`), desktop `--quick-review --file`, `Apply All & Copy`, `Escape`, and Linux/Windows OS context-menu hooks (`cargo xtask ci` green) |
+| 2026-11-27 | M6-2 | PR #15 merged (`b44878d`): `grammarcraft-cli quick-review`, desktop `--quick-review --file`, `Apply All & Copy`, `Escape`, and Linux/Windows OS context-menu hooks |
+| 2026-11-28 | M6-3 | Added real-time live translation (`LiveTranslationConfig`, `TranslationResult`, `LocalOfflineTranslator` `pt`/`en`/`es`, `translate_with_cloud` under `ConsentLedger`, `translate.configure`/`live`/`status` — 39 commands, `native-messaging` allowlist, and `Live Translate` UI selector; `cargo xtask ci` green) |
