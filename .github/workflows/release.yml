@@ -11,6 +11,11 @@ on:
         description: "Version override for a test run, e.g. 0.2.0-rc.1 (empty: Cargo.toml)"
         type: string
         default: ""
+      dry-run:
+        description: "Dry-run build without signing or publishing"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -26,7 +31,7 @@ jobs:
       packages: write
     uses: storytold/craft-common-actions/.github/workflows/release.yml@main
     with:
-      dry-run: ${{ github.event_name == 'schedule' }}
+      dry-run: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.dry-run) }}
       app-name: "grammarcraft"
       app-title: "GrammarCraft"
       craft-fonts-ref: ""
