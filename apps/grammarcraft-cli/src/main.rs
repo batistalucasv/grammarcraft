@@ -29,6 +29,7 @@ USAGE:
   grammarcraft-cli stats                                                   measure text stats in a fresh session
   grammarcraft-cli mcp --automation-read-root <dir> --automation-write-root <dir>
   grammarcraft-cli -h | --help                                             this text
+  grammarcraft-cli -V | --version                                          print version
 
 EXIT CODES:
   0  success
@@ -66,6 +67,10 @@ fn dispatch(args: Vec<String>) -> Result<ExitCode, String> {
         "mcp" => mcp::run(&args[1..]),
         "-h" | "--help" | "help" => {
             print!("{USAGE}");
+            Ok(ExitCode::SUCCESS)
+        }
+        "-V" | "--version" => {
+            println!("grammarcraft-cli {}", env!("CARGO_PKG_VERSION"));
             Ok(ExitCode::SUCCESS)
         }
         other => Err(format!("unknown subcommand `{other}`\n\n{USAGE}")),
