@@ -596,3 +596,223 @@ fn analysis_engine_integrates_upstream_ready_punctuation_and_spacing_rules() {
             .any(|i| i.rule_id == "proof.missing_space")
     );
 }
+
+#[test]
+fn deep_grammar_detects_en_pt_es_issues_and_avoids_false_positives() {
+    let mut engine = AnalysisEngine::new();
+    let dict = PersonalDictionary::new();
+    let ignored = IgnoredIssueSet::new();
+    let guide = StyleGuide::new();
+
+    // EN: comma splice, agreement, less/fewer, nominalization
+    let mut en_bad = Document::new();
+    en_bad
+        .set_text("We shipped, however, the list of errors are showing less bugs when we make a decision.")
+        .expect("valid");
+    let en_report = engine
+        .analyze(
+            &en_bad,
+            Some("en-US"),
+            WritingGoals::default(),
+            &dict,
+            &ignored,
+            &guide,
+        )
+        .expect("en");
+    for rule in [
+        "grammar.comma_splice",
+        "grammar.subject_verb_agreement",
+        "grammar.less_vs_fewer",
+        "clarity.nominalization",
+    ] {
+        assert!(
+            en_report.issues.iter().any(|i| i.rule_id == rule),
+            "missing `{rule}` in {:?}",
+            en_report.issues
+        );
+    }
+
+    let mut en_clean = Document::new();
+    en_clean
+        .set_text("We shipped; however, the list of errors is showing fewer bugs and less water.")
+        .expect("valid");
+    let en_clean_rep = engine
+        .analyze(
+            &en_clean,
+            Some("en-US"),
+            WritingGoals::default(),
+            &dict,
+            &ignored,
+            &guide,
+        )
+        .expect("en clean");
+    assert!(
+        en_clean_rep
+            .issues
+            .iter()
+            .all(|i| !i.rule_id.starts_with("grammar.")),
+        "unexpected grammar false positive: {:?}",
+        en_clean_rep.issues
+    );
+
+    // PT-BR: crase, existential haver/fazer, nominalization
+    let mut pt_bad = Document::new();
+    pt_bad
+        .set_text(
+            "À partir de hoje, houveram falhas fazem 5 anos a medida que vamos tomar uma decisão.",
+        )
+        .expect("valid");
+    let pt_report = engine
+        .analyze(
+            &pt_bad,
+            Some("pt-BR"),
+            WritingGoals::default(),
+            &dict,
+            &ignored,
+            &guide,
+        )
+        .expect("pt");
+    assert!(
+        pt_report
+            .issues
+            .iter()
+            .any(|i| i.rule_id == "grammar.pt_crase")
+    );
+    assert!(
+        pt_report
+            .issues
+            .iter()
+            .filter(|i| i.rule_id == "grammar.pt_existential")
+            .count()
+            >= 2
+    );
+    assert!(
+        pt_report
+            .issues
+            .iter()
+            .any(|i| i.rule_id == "clarity.nominalization"
+                && i.replacements.first().map(|r| r.text.as_str()) == Some("decidir"))
+    );
+
+    let mut pt_clean = Document::new();
+    pt_clean
+        .set_text(
+            "A partir de hoje, houve avanços faz 5 anos à medida que trabalhamos lado a lado.",
+        )
+        .expect("valid");
+    let pt_clean_rep = engine
+        .analyze(
+            &pt_clean,
+            Some("pt-BR"),
+            WritingGoals::default(),
+            &dict,
+            &ignored,
+            &guide,
+        )
+        .expect("pt clean");
+    assert!(
+        pt_clean_rep
+            .issues
+            .iter()
+            .all(|i| !i.rule_id.starts_with("grammar.")),
+        "unexpected PT false positive: {:?}",
+        pt_clean_rep.issues
+    );
+
+    // ES: dequeísmo and existential hubieron
+    let mut es_bad = Document::new();
+    es_bad
+        .set_text("Pienso de que hubieron muchos cambios ayer.")
+        .expect("valid");
+    let es_report = engine
+        .analyze(
+            &es_bad,
+            Some("es-ES"),
+            WritingGoals::default(),
+            &dict,
+            &ignored,
+            &guide,
+        )
+        .expect("es");
+    assert!(
+        es_report
+            .issues
+            .iter()
+            .any(|i| i.rule_id == "grammar.es_dequeismo")
+    );
+    assert!(
+        es_report
+            .issues
+            .iter()
+            .any(|i| i.rule_id == "grammar.es_existential")
+    );
+
+    let mut es_clean = Document::new();
+    es_clean
+        .set_text("Pienso que hubo muchos cambios cuando ellos hubieron terminado.")
+        .expect("valid");
+    let es_clean_rep = engine
+        .analyze(
+            &es_clean,
+            Some("es-ES"),
+            WritingGoals::default(),
+            &dict,
+            &ignored,
+            &guide,
+        )
+        .expect("es clean");
+    assert!(
+        es_clean_rep
+            .issues
+            .iter()
+            .all(|i| !i.rule_id.starts_with("grammar.")),
+        "unexpected ES false positive: {:?}",
+        es_clean_rep.issues
+    );
+}
+
+#[test]
+fn monotonous_rhythm_triggers_at_three_sentences_and_relaxes_for_technical_specialized() {
+    let mut doc = Document::new();
+    doc.set_text(
+        "We built the parser quickly. We tested the cache today. We verified every rule clearly.",
+    )
+    .expect("valid");
+    let mut engine = AnalysisEngine::new();
+    let dict = PersonalDictionary::new();
+    let ignored = IgnoredIssueSet::new();
+    let guide = StyleGuide::new();
+
+    let default_rep = engine
+        .analyze(
+            &doc,
+            Some("en-US"),
+            WritingGoals::default(),
+            &dict,
+            &ignored,
+            &guide,
+        )
+        .expect("default");
+    assert!(
+        default_rep
+            .issues
+            .iter()
+            .any(|i| i.rule_id == "clarity.monotonous_rhythm")
+    );
+
+    let tech_goals = WritingGoals {
+        audience: Audience::Specialized,
+        context: Context::Technical,
+        ..WritingGoals::default()
+    };
+    let tech_rep = engine
+        .analyze(&doc, Some("en-US"), tech_goals, &dict, &ignored, &guide)
+        .expect("tech");
+    assert!(
+        tech_rep
+            .issues
+            .iter()
+            .all(|i| i.rule_id != "clarity.monotonous_rhythm"),
+        "expected 3 parallel technical sentences to pass when threshold is 4"
+    );
+}

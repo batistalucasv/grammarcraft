@@ -17,15 +17,20 @@ pub mod ai;
 mod cmd;
 mod error;
 pub mod file_access;
+pub mod hotkey;
 mod io;
 pub mod os_bridge;
 mod translate;
 
-pub use ai::{AiBackend, CraftProviderBackend, LocalOfflineBackend};
+pub use ai::{AiBackend, CraftProviderBackend, LocalOfflineBackend, RtenTextModelRunner};
 pub use cmd::{CommandSpec, Registry, registry};
 pub use error::{CmdError, CmdResult};
 pub use grammarcraft_core::MAX_DOCUMENT_BYTES;
 pub use grammarcraft_rules::AnalysisReport;
+pub use hotkey::{
+    GlobalHotkeyListener, HotkeyBinding, MAX_HOTKEY_BYTES, MockHotkeyListener,
+    PlatformHotkeyListener, run_hotkey_overlay_once,
+};
 pub use os_bridge::{
     AnchorRect, MockOsTextBridge, OsOverlayCapabilities, OsSelection, OsTextBridge,
     PlatformOsBridge,

@@ -1077,3 +1077,158 @@ fn overlay_capture_reviews_translates_and_replaces_external_selection() {
     assert!(final_text.contains("Hello, good morning."), "{final_text}");
     assert_eq!(bridge.last_replaced().as_deref(), Some(final_text));
 }
+
+#[test]
+fn hotkey_binding_validates_and_mock_listener_triggers_overlay_once() {
+    use std::sync::Arc;
+
+    use crate::{
+        GlobalHotkeyListener, HotkeyBinding, MockHotkeyListener, MockOsTextBridge, OsSelection,
+        OsTextBridge, PlatformHotkeyListener, run_hotkey_overlay_once,
+    };
+
+    let binding = HotkeyBinding::parse("ctrl + shift + g").expect("valid hotkey");
+    assert_eq!(binding.raw, "Ctrl+Shift+G");
+    assert_eq!(binding.modifiers, vec!["Ctrl", "Shift"]);
+    assert_eq!(binding.key, "G");
+
+    assert!(HotkeyBinding::parse("G").is_err(), "missing modifier");
+    assert!(HotkeyBinding::parse("").is_err(), "empty hotkey");
+    assert!(
+        HotkeyBinding::parse(&"Ctrl+".repeat(20)).is_err(),
+        "oversized hotkey"
+    );
+
+    let bridge = Arc::new(MockOsTextBridge::new(Some(OsSelection {
+        text: "Teh note.".to_owned(),
+        anchor: None,
+        app_name: Some("Editor".to_owned()),
+    })));
+    let mut session = Session::new();
+    session.set_os_bridge(bridge as Arc<dyn OsTextBridge>);
+
+    let listener = MockHotkeyListener::triggered_once();
+    let res = run_hotkey_overlay_once(&listener, &binding, &mut session).expect("hotkey run");
+    assert_eq!(res["triggered"], true);
+    assert_eq!(res["hotkey"], "Ctrl+Shift+G");
+    assert_eq!(res["overlay"]["text"], "Teh note.");
+
+    let idle = run_hotkey_overlay_once(&listener, &binding, &mut session).expect("second idle");
+    assert_eq!(idle["triggered"], false);
+
+    // Platform listener returns a clean error without panicking in headless CI.
+    let platform = PlatformHotkeyListener;
+    let _ = platform.listener_name();
+}
+
+#[test]
+fn rten_text_model_runner_verifies_sha256_loads_onnx_and_executes_inference() {
+    use std::fmt::Write as _;
+    use std::sync::Arc;
+
+    use sha2::{Digest, Sha256};
+
+    use crate::RtenTextModelRunner;
+
+    fn write_varint(buf: &mut Vec<u8>, mut val: u64) {
+        loop {
+            let mut byte = (val & 0x7f) as u8;
+            val >>= 7;
+            if val != 0 {
+                byte |= 0x80;
+            }
+            buf.push(byte);
+            if val == 0 {
+                break;
+            }
+        }
+    }
+
+    fn write_field_bytes(buf: &mut Vec<u8>, field: u64, payload: &[u8]) {
+        write_varint(buf, (field << 3) | 2);
+        write_varint(buf, payload.len() as u64);
+        buf.extend_from_slice(payload);
+    }
+
+    fn write_field_varint(buf: &mut Vec<u8>, field: u64, val: u64) {
+        write_varint(buf, field << 3);
+        write_varint(buf, val);
+    }
+
+    fn encode_value_info(name: &str) -> Vec<u8> {
+        let mut tensor_type = Vec::new();
+        write_field_varint(&mut tensor_type, 1, 1); // FLOAT
+        let mut type_proto = Vec::new();
+        write_field_bytes(&mut type_proto, 1, &tensor_type);
+        let mut vi = Vec::new();
+        write_field_bytes(&mut vi, 1, name.as_bytes());
+        write_field_bytes(&mut vi, 2, &type_proto);
+        vi
+    }
+
+    fn encode_minimal_identity_onnx() -> Vec<u8> {
+        let mut node = Vec::new();
+        write_field_bytes(&mut node, 1, b"x");
+        write_field_bytes(&mut node, 2, b"y");
+        write_field_bytes(&mut node, 4, b"Identity");
+
+        let mut graph = Vec::new();
+        write_field_bytes(&mut graph, 1, &node);
+        write_field_bytes(&mut graph, 11, &encode_value_info("x"));
+        write_field_bytes(&mut graph, 12, &encode_value_info("y"));
+
+        let mut opset = Vec::new();
+        write_field_varint(&mut opset, 2, 17);
+
+        let mut model = Vec::new();
+        write_field_varint(&mut model, 1, 8); // ir_version = 8
+        write_field_bytes(&mut model, 7, &graph);
+        write_field_bytes(&mut model, 8, &opset);
+        model
+    }
+
+    let base = std::env::temp_dir().join(format!("gc-rten-onnx-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).expect("temp dir");
+    let onnx_path = base.join("micro-identity.onnx");
+    let onnx_bytes = encode_minimal_identity_onnx();
+    std::fs::write(&onnx_path, &onnx_bytes).expect("write onnx");
+
+    let mut hex_sha = String::with_capacity(64);
+    for b in Sha256::digest(&onnx_bytes) {
+        let _ = write!(hex_sha, "{b:02x}");
+    }
+
+    let runner = Arc::new(
+        RtenTextModelRunner::new("grammar-rten-micro", "GrammarCraft RTen Micro")
+            .expect("valid runner"),
+    );
+    let mut session = Session::new();
+    session
+        .register_local_runner(runner, onnx_path.clone(), Some(hex_sha))
+        .expect("register rten runner");
+
+    run(
+        &mut session,
+        "doc.set_text",
+        json!({ "text": "We shipped in order to learn." }),
+    )
+    .expect("set text");
+
+    let res = run(&mut session, "ai.rewrite", json!({})).expect("rten inference");
+    assert_eq!(res["proposal"]["proposed"], "We shipped to learn.");
+    assert_eq!(
+        res["proposal"]["provider_label"],
+        "local-engine:rten/grammar-rten-micro"
+    );
+    let info = session.loaded_local_model_info().expect("loaded info");
+    assert_eq!(info.bytes, onnx_bytes.len() as u64);
+
+    // Tampered ONNX weights must be refused by SHA-256 verification before rten::Model::load_file.
+    std::fs::write(&onnx_path, b"corrupted-onnx-bytes").expect("tamper onnx");
+    let _ = session.unload_local_model();
+    let err = run(&mut session, "ai.rewrite", json!({})).expect_err("tampered onnx must fail");
+    assert!(err.to_string().contains("SHA-256 mismatch"));
+
+    let _ = std::fs::remove_dir_all(&base);
+}

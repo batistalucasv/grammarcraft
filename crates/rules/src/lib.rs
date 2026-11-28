@@ -9,6 +9,7 @@
 
 mod clarity;
 mod contextual;
+mod grammar_deep;
 mod inclusive_formality;
 mod proof_adapter;
 mod scoring;
@@ -186,6 +187,7 @@ fn compute_paragraph_findings(
     let mut findings = proof_adapter::check_paragraph(para_text, proof_lang);
     findings.extend(upstream_ready::check_paragraph(para_text, proof_lang));
     findings.extend(contextual::check_paragraph(para_text, proof_lang));
+    findings.extend(grammar_deep::check_paragraph(para_text, proof_lang));
     findings.extend(variants::check_paragraph(para_text, proof_lang));
     findings.extend(clarity::check_paragraph(para_text, proof_lang, goals));
     findings.extend(inclusive_formality::check_paragraph(
