@@ -566,3 +566,33 @@ fn local_similarity_detects_overlapping_passages_deterministically() {
     assert!(report.matches[0].jaccard_percent >= 50);
     assert!(report.matches[0].span.slice(doc_text).is_ok());
 }
+
+#[test]
+fn analysis_engine_integrates_upstream_ready_punctuation_and_spacing_rules() {
+    let mut doc = Document::new();
+    doc.set_text("Check ( this ),next.").expect("valid");
+    let mut engine = AnalysisEngine::new();
+    let report = engine
+        .analyze(
+            &doc,
+            Some("en-US"),
+            WritingGoals::default(),
+            &PersonalDictionary::new(),
+            &IgnoredIssueSet::new(),
+            &StyleGuide::new(),
+        )
+        .expect("analysis succeeds");
+
+    assert!(
+        report
+            .issues
+            .iter()
+            .any(|i| i.rule_id == "proof.bracket_spacing")
+    );
+    assert!(
+        report
+            .issues
+            .iter()
+            .any(|i| i.rule_id == "proof.missing_space")
+    );
+}

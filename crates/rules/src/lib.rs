@@ -15,6 +15,7 @@ mod scoring;
 pub mod similarity;
 mod style_guide_eval;
 mod tone;
+pub mod upstream_ready;
 mod variants;
 
 use std::collections::HashMap;
@@ -183,6 +184,7 @@ fn compute_paragraph_findings(
     style_guide: &StyleGuide,
 ) -> Vec<RawFinding> {
     let mut findings = proof_adapter::check_paragraph(para_text, proof_lang);
+    findings.extend(upstream_ready::check_paragraph(para_text, proof_lang));
     findings.extend(contextual::check_paragraph(para_text, proof_lang));
     findings.extend(variants::check_paragraph(para_text, proof_lang));
     findings.extend(clarity::check_paragraph(para_text, proof_lang, goals));
