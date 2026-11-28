@@ -458,3 +458,32 @@ fn quick_review_apply_all_and_copy_file_arg_and_escape_without_focus_trap() {
     assert!(!h.state().quick_review);
     assert!(h.ctx.memory(|m| m.focused().is_none()));
 }
+
+#[test]
+fn live_translate_translates_completed_sentence_and_supports_immediate_undo() {
+    let mut h = harness_with_text("");
+
+    h.get_by_label("Live Translate").click();
+    h.run_steps(2);
+    h.get_by_label("EN").click();
+    h.run_steps(2);
+
+    assert!(h.state().session.doc().live_translation.enabled);
+    assert_eq!(h.state().session.doc().live_translation.target_lang, "en");
+
+    let editor = h.get_by_role_and_label(Role::MultilineTextInput, "Document Editor");
+    editor.click();
+    h.step();
+    h.event(egui::Event::Text("Olá, bom dia.".to_owned()));
+    h.run_steps(4);
+
+    assert_eq!(h.state().session.doc().text(), "Hello, good morning.");
+    assert_eq!(h.state().editor_text, "Hello, good morning.");
+    assert!(h.state().session.can_undo());
+
+    h.get_by_label("Undo").click();
+    h.run_steps(4);
+
+    assert_eq!(h.state().session.doc().text(), "Olá, bom dia.");
+    assert_eq!(h.state().editor_text, "Olá, bom dia.");
+}

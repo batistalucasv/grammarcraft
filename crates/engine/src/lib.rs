@@ -18,6 +18,7 @@ mod cmd;
 mod error;
 pub mod file_access;
 mod io;
+mod translate;
 
 pub use ai::{AiBackend, CraftProviderBackend, LocalOfflineBackend};
 pub use cmd::{CommandSpec, Registry, registry};

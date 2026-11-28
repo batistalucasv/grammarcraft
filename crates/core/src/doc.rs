@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{CoreError, CoreResult, TextStats};
+use crate::{CoreError, CoreResult, LiveTranslationConfig, TextStats};
 
 /// Longest document text accepted, in bytes (1 MiB).
 ///
@@ -72,6 +72,8 @@ impl TextSpan {
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Document {
     text: String,
+    #[serde(default)]
+    pub live_translation: LiveTranslationConfig,
 }
 
 impl Document {

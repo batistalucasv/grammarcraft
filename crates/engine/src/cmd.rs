@@ -6,12 +6,12 @@ use std::sync::OnceLock;
 use grammarcraft_core::{
     AiLocalityMode, AiMode, Audience, CitationStyle, Context, CoreError, Formality,
     IgnoredIssueKey, Issue, IssueCategory, IssueId, Purpose, StyleRule, StyleRuleKind, TextStats,
-    WritingGoals, format_bibliography, parse_bibtex_entries, validate_citations,
+    WritingGoals, format_bibliography, parse_bibtex_entries, validate_citations, validate_lang_tag,
 };
 use grammarcraft_rules::{AnalysisReport, check_local_similarity, validate_style_rule};
 use serde_json::{Value, json};
 
-use crate::{CmdError, CmdResult, Session, io};
+use crate::{CmdError, CmdResult, Session, io, translate};
 
 /// A registered command.
 #[derive(Clone)]
@@ -225,6 +225,13 @@ fn specs() -> Vec<CommandSpec> {
             .pure(),
         CommandSpec::new("citations.format", "Format Citations", "Citations › BibTeX", citations_format)
             .params(r#"{"bibtex": string, "style": string}"#)
+            .pure(),
+        CommandSpec::new("translate.configure", "Configure Live Translation", "Review › Translate", translate_configure)
+            .params(r#"{"enabled"?: boolean, "source_lang"?: string|null, "target_lang"?: string}"#),
+        CommandSpec::new("translate.live", "Live Translate", "Review › Translate", translate_live)
+            .params(r#"{"text"?: string, "apply"?: boolean}"#),
+        CommandSpec::new("translate.status", "Live Translation Status", "Review › Translate", translate_status)
+            .params("{}")
             .pure(),
     ]
 }
@@ -868,6 +875,66 @@ fn citations_format(session: &mut Session, params: &Value) -> CmdResult {
         "formatted": formatted,
         "issues": diagnostics,
     }))
+}
+
+fn translate_configure(session: &mut Session, params: &Value) -> CmdResult {
+    p::require_object(params)?;
+    let mut next = session.doc.live_translation.clone();
+    if let Some(enabled) = p::opt_bool(params, "enabled")? {
+        next.enabled = enabled;
+    }
+    if let Some(raw_src) = params.get("source_lang") {
+        if raw_src.is_null() {
+            next.source_lang = None;
+        } else if let Some(tag) = raw_src.as_str() {
+            next.source_lang = Some(validate_lang_tag(tag, "source_lang")?);
+        } else {
+            return Err(CmdError::Params(
+                "`source_lang` must be a string or null".to_owned(),
+            ));
+        }
+    }
+    if let Some(tag) = p::opt_str(params, "target_lang")? {
+        next.target_lang = validate_lang_tag(tag, "target_lang")?;
+    }
+    session.doc.live_translation = next;
+    Ok(translate_status_json(session))
+}
+
+fn translate_live(session: &mut Session, params: &Value) -> CmdResult {
+    p::require_object_or_empty(params)?;
+    let explicit_text = p::opt_str(params, "text")?;
+    let apply = p::opt_bool(params, "apply")?.unwrap_or(false);
+    let result = translate::translate_live(session, explicit_text, apply)?;
+    Ok(json!({
+        "span": result.span.map(|s| json!({ "start": s.start(), "end": s.end() })),
+        "source_text": result.source_text,
+        "translated_text": result.translated_text,
+        "source_lang": result.source_lang,
+        "target_lang": result.target_lang,
+        "backend": result.backend,
+        "applied": result.applied,
+        "text": session.doc.text(),
+    }))
+}
+
+fn translate_status(session: &mut Session, params: &Value) -> CmdResult {
+    p::require_object_or_empty(params)?;
+    Ok(translate_status_json(session))
+}
+
+fn translate_status_json(session: &Session) -> Value {
+    let cloud_consent_granted = matches!(
+        session.ai_consent_status(),
+        Ok(grammarcraft_core::AiConsentStatus::Granted { .. })
+    );
+    let cfg = &session.doc.live_translation;
+    json!({
+        "enabled": cfg.enabled,
+        "source_lang": cfg.source_lang,
+        "target_lang": cfg.target_lang,
+        "cloud_consent_granted": cloud_consent_granted,
+    })
 }
 
 fn report_json(report: &AnalysisReport, doc_text: &str) -> Value {

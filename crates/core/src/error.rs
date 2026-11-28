@@ -23,6 +23,12 @@ pub enum CoreError {
     NonCharBoundary { offset: usize },
     #[error("invalid {field} goal `{value}`")]
     InvalidGoal { field: &'static str, value: String },
+    #[error("invalid {field} language tag `{value}` (expected 1..={max} non-whitespace bytes)")]
+    InvalidLangTag {
+        field: &'static str,
+        value: String,
+        max: usize,
+    },
     #[error("too many issues (limit {max})")]
     TooManyIssues { max: usize },
     #[error("too many suggestions for one issue (limit {max})")]

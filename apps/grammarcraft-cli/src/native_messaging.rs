@@ -16,6 +16,9 @@ const ALLOWED_COMMANDS: &[&str] = &[
     "review.check",
     "review.dismiss",
     "stats.measure",
+    "translate.configure",
+    "translate.live",
+    "translate.status",
 ];
 
 pub(crate) fn run(args: &[String]) -> Result<ExitCode, String> {
@@ -189,6 +192,16 @@ mod tests {
             &json!({ "id": 5, "command": "doc.open", "params": { "path": "/etc/passwd" } }),
         )
         .unwrap();
+        write_frame(
+            &mut incoming,
+            &json!({ "id": 6, "command": "translate.configure", "params": { "enabled": true, "target_lang": "en" } }),
+        )
+        .unwrap();
+        write_frame(
+            &mut incoming,
+            &json!({ "id": 7, "command": "translate.live", "params": { "text": "Olá, bom dia.", "apply": false } }),
+        )
+        .unwrap();
 
         let mut reader = Cursor::new(incoming);
         let mut out = Vec::new();
@@ -200,7 +213,7 @@ mod tests {
             replies.push(serde_json::from_slice(&raw).expect("valid JSON"));
         }
 
-        assert_eq!(replies.len(), 5);
+        assert_eq!(replies.len(), 7);
         assert_eq!(replies[0]["id"], 1);
         assert_eq!(replies[0]["ok"], true);
         assert_eq!(replies[1]["ok"], true);
@@ -217,6 +230,13 @@ mod tests {
             replies[4]["error"]
                 .as_str()
                 .is_some_and(|e| e.contains("not permitted"))
+        );
+        assert_eq!(replies[5]["ok"], true);
+        assert_eq!(replies[5]["result"]["enabled"], true);
+        assert_eq!(replies[6]["ok"], true);
+        assert_eq!(
+            replies[6]["result"]["translated_text"],
+            "Hello, good morning."
         );
     }
 }

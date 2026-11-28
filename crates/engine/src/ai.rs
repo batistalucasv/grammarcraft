@@ -472,6 +472,35 @@ impl AiSessionState {
         Ok((text, label, destination))
     }
 
+    pub(crate) fn translate_with_cloud(
+        &self,
+        source_lang: Option<&str>,
+        target_lang: &str,
+        text: &str,
+    ) -> Result<(String, String), CmdError> {
+        let disclosure = self.disclosure_for(text.len())?;
+        if self.mode != AiLocalityMode::CloudConsentRequired
+            || self.consent_ledger.needs_consent(&disclosure, now_secs())
+        {
+            return Err(CmdError::Disabled(format!(
+                "remote AI consent required before translating text via {}",
+                disclosure.destination
+            )));
+        }
+        let backend = self.cloud_backend.as_ref().ok_or_else(|| {
+            CmdError::Failed(format!(
+                "cloud AI consent granted for {}, but no remote provider/API key is configured",
+                disclosure.destination
+            ))
+        })?;
+        let src_desc = source_lang.unwrap_or("auto");
+        let detail = format!(
+            "Translate the following text from {src_desc} to {target_lang}. Return only the translated text."
+        );
+        let translated = backend.generate(AiMode::Rewrite, text, &detail)?;
+        Ok((translated.trim().to_owned(), backend.label().to_owned()))
+    }
+
     pub fn stage_proposal(
         &mut self,
         ai_mode: AiMode,

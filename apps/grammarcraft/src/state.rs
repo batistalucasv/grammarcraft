@@ -115,6 +115,7 @@ pub struct GrammarCraftApp {
     pub status_notice: Option<(String, bool)>,
     pub host: Arc<Host>,
     pub quick_review: bool,
+    pub last_live_translated: Option<String>,
     pub(crate) dialogs: Option<Dialogs<FileAction>>,
     pub(crate) control: Option<ControlChannel>,
     pub(crate) control_server: Option<ControlServer>,
@@ -153,6 +154,7 @@ impl GrammarCraftApp {
             status_notice: None,
             host: build_host(),
             quick_review: false,
+            last_live_translated: None,
             dialogs: None,
             control: None,
             control_server: None,
@@ -247,12 +249,46 @@ impl GrammarCraftApp {
     }
 
     pub fn set_text_and_check(&mut self) {
-        if self.session.doc().text() != self.editor_text
-            && !self.run_and_report("doc.set_text", json!({ "text": self.editor_text }))
-        {
-            return;
+        if self.session.doc().text() != self.editor_text {
+            if !self.run_and_report("doc.set_text", json!({ "text": self.editor_text })) {
+                return;
+            }
+            self.maybe_run_live_translation();
         }
         self.refresh_check();
+    }
+
+    fn maybe_run_live_translation(&mut self) {
+        if !self.session.doc().live_translation.enabled || self.editor_text.trim().is_empty() {
+            return;
+        }
+        if !self.editor_text.ends_with(['.', '!', '?', '\n']) {
+            return;
+        }
+        if self.last_live_translated.as_deref() == Some(self.editor_text.as_str()) {
+            return;
+        }
+        match self.dispatch("translate.live", json!({ "apply": true })) {
+            Ok(result) => {
+                if result.get("applied").and_then(Value::as_bool) == Some(true) {
+                    let updated = self.session.doc().text().to_owned();
+                    self.editor_text = updated.clone();
+                    self.last_live_translated = Some(updated);
+                    self.selected_issue_id = None;
+                    self.highlight_span = None;
+                    self.status_notice = Some((
+                        format!(
+                            "Translated ({})",
+                            self.session.doc().live_translation.target_lang
+                        ),
+                        false,
+                    ));
+                }
+            }
+            Err(_) => {
+                self.last_live_translated = Some(self.editor_text.clone());
+            }
+        }
     }
 
     pub fn sync_editor_from_session(&mut self) {
@@ -430,6 +466,21 @@ impl GrammarCraftApp {
     pub fn set_language(&mut self, tag: &str) {
         if self.run_and_report("goals.set", json!({ "language": tag })) {
             self.refresh_check();
+        }
+    }
+
+    pub fn set_live_translation(&mut self, enabled: bool, target_lang: &str) {
+        if self.run_and_report(
+            "translate.configure",
+            json!({ "enabled": enabled, "target_lang": target_lang }),
+        ) {
+            self.last_live_translated = None;
+            let notice = if enabled {
+                format!("Live Translate: {target_lang}")
+            } else {
+                "Live Translate: Off".to_owned()
+            };
+            self.status_notice = Some((notice, false));
         }
     }
 
