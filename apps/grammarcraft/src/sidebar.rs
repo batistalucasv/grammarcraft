@@ -1,7 +1,9 @@
 use craft::theme::Variant;
 use craft::theme::variant::{Emphasis, Tone};
-use craft::ui::contract::{Props as _, Show as _};
-use craft::ui::display::Badge;
+use craft::ui::choice::Checkbox;
+use craft::ui::contract::{Bind, Props as _, Show as _};
+use craft::ui::display::{Badge, Divider};
+use craft::ui::text::TextField;
 use grammarcraft_core::{
     AiConsentStatus, AiDiffOp, AiLocalityMode, AiMode, CitationStyle, Issue, IssueCategory,
     ReadabilityLevel, StyleRuleKind, ToneSignal, WritingGoals,
@@ -23,7 +25,7 @@ const CATEGORY_FILTERS: [(Option<IssueCategory>, &str); 6] = [
 
 pub fn show(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
     show_tab_strip(app, ui);
-    ui.separator();
+    Divider::horizontal().show(ui);
 
     egui::ScrollArea::vertical()
         .id_salt("sidebar_scroll")
@@ -197,16 +199,15 @@ fn show_goals_tab(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
 
     show_goal_selectors(&mut updated, ui);
     ui.add_space(6.0);
-    ui.checkbox(
-        &mut updated.inclusive_language,
-        "Inclusive language (opt-in)",
-    );
+    Checkbox::new(Bind::bound(&mut updated.inclusive_language))
+        .label("Inclusive language (opt-in)")
+        .show(ui);
     if updated != current {
         app.set_goals(updated);
     }
 
     ui.add_space(10.0);
-    ui.separator();
+    Divider::horizontal().show(ui);
     ui.heading("Writing Score");
     let score = app.writing_score();
     ui.strong(format!("Overall: {} / 100", score.score));
@@ -220,7 +221,7 @@ fn show_goals_tab(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
     ));
 
     ui.add_space(10.0);
-    ui.separator();
+    Divider::horizontal().show(ui);
     ui.heading("Readability & Stats");
     let r = app.readability();
     let stats = app.session.doc().stats();
@@ -372,16 +373,17 @@ fn show_style_snippets_tab(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
     }
 
     ui.add_space(10.0);
-    ui.separator();
+    Divider::horizontal().show(ui);
     ui.heading("Snippets");
     show_snippet_form(app, ui);
     ui.add_space(6.0);
     ui.horizontal(|ui| {
         ui.label("Vars (k=v, ...):");
-        let vars_resp = ui.text_edit_singleline(&mut app.snippet_draft.expand_vars);
-        ui.ctx().accesskit_node_builder(vars_resp.id, |node| {
-            node.set_label("Snippet Variables");
-        });
+        TextField::new(
+            "Snippet Variables",
+            Bind::bound(&mut app.snippet_draft.expand_vars),
+        )
+        .show(ui);
     });
     let snippets: Vec<_> = app.session.snippets().list().into_iter().cloned().collect();
     if snippets.is_empty() {
@@ -420,34 +422,30 @@ fn show_style_form(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
         .spacing([6.0, 4.0])
         .show(ui, |ui| {
             ui.label("Rule ID");
-            let id_resp = ui.text_edit_singleline(&mut app.style_draft.id);
-            ui.ctx().accesskit_node_builder(id_resp.id, |node| {
-                node.set_label("Style Rule ID");
-            });
+            TextField::new("Style Rule ID", Bind::bound(&mut app.style_draft.id)).show(ui);
             ui.end_row();
             let term_label = match app.style_draft.kind {
                 StyleRuleDraftKind::PreferredTerm => "Discouraged",
                 StyleRuleDraftKind::BrandCasing => "Exact Brand",
             };
             ui.label(term_label);
-            let term_resp = ui.text_edit_singleline(&mut app.style_draft.term);
-            ui.ctx().accesskit_node_builder(term_resp.id, |node| {
-                node.set_label(term_label);
-            });
+            TextField::new(term_label, Bind::bound(&mut app.style_draft.term)).show(ui);
             ui.end_row();
             if app.style_draft.kind == StyleRuleDraftKind::PreferredTerm {
                 ui.label("Preferred");
-                let pref_resp = ui.text_edit_singleline(&mut app.style_draft.preferred);
-                ui.ctx().accesskit_node_builder(pref_resp.id, |node| {
-                    node.set_label("Preferred Term");
-                });
+                TextField::new(
+                    "Preferred Term",
+                    Bind::bound(&mut app.style_draft.preferred),
+                )
+                .show(ui);
                 ui.end_row();
             }
             ui.label("Rationale");
-            let rat_resp = ui.text_edit_singleline(&mut app.style_draft.rationale);
-            ui.ctx().accesskit_node_builder(rat_resp.id, |node| {
-                node.set_label("Style Rule Rationale");
-            });
+            TextField::new(
+                "Style Rule Rationale",
+                Bind::bound(&mut app.style_draft.rationale),
+            )
+            .show(ui);
             ui.end_row();
         });
     if primary_button(ui, "Add Style Rule", true).clicked() {
@@ -461,22 +459,13 @@ fn show_snippet_form(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
         .spacing([6.0, 4.0])
         .show(ui, |ui| {
             ui.label("Prefix");
-            let prefix_resp = ui.text_edit_singleline(&mut app.snippet_draft.prefix);
-            ui.ctx().accesskit_node_builder(prefix_resp.id, |node| {
-                node.set_label("Snippet Prefix");
-            });
+            TextField::new("Snippet Prefix", Bind::bound(&mut app.snippet_draft.prefix)).show(ui);
             ui.end_row();
             ui.label("Title");
-            let title_resp = ui.text_edit_singleline(&mut app.snippet_draft.title);
-            ui.ctx().accesskit_node_builder(title_resp.id, |node| {
-                node.set_label("Snippet Title");
-            });
+            TextField::new("Snippet Title", Bind::bound(&mut app.snippet_draft.title)).show(ui);
             ui.end_row();
             ui.label("Body");
-            let body_resp = ui.text_edit_singleline(&mut app.snippet_draft.body);
-            ui.ctx().accesskit_node_builder(body_resp.id, |node| {
-                node.set_label("Snippet Body");
-            });
+            TextField::new("Snippet Body", Bind::bound(&mut app.snippet_draft.body)).show(ui);
             ui.end_row();
         });
     if primary_button(ui, "Add Snippet", true).clicked() {
@@ -540,17 +529,15 @@ fn show_ai_assist_tab(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
 
     ui.add_space(6.0);
     ui.label("Instruction / Draft Prompt");
-    let instr_resp = ui.text_edit_singleline(&mut app.ai_instruction);
-    ui.ctx().accesskit_node_builder(instr_resp.id, |node| {
-        node.set_label("AI Instruction or Prompt");
-    });
+    TextField::new(
+        "AI Instruction or Prompt",
+        Bind::bound(&mut app.ai_instruction),
+    )
+    .show(ui);
 
     ui.horizontal(|ui| {
         ui.label("Target Tone");
-        let tone_resp = ui.text_edit_singleline(&mut app.ai_tone);
-        ui.ctx().accesskit_node_builder(tone_resp.id, |node| {
-            node.set_label("AI Target Tone");
-        });
+        TextField::new("AI Target Tone", Bind::bound(&mut app.ai_tone)).show(ui);
     });
 
     let has_doc = !app.session.doc().is_empty();
@@ -574,7 +561,7 @@ fn show_ai_assist_tab(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
 
     if let Some(proposal) = app.session.pending_ai_proposal().cloned() {
         ui.add_space(8.0);
-        ui.separator();
+        Divider::horizontal().show(ui);
         ui.strong(format!(
             "Staged {} Proposal ({})",
             proposal.mode.label(),
@@ -653,14 +640,11 @@ fn show_citations_similarity_tab(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
     }
 
     ui.add_space(10.0);
-    ui.separator();
+    Divider::horizontal().show(ui);
     ui.heading("Local Similarity Check");
     ui.horizontal(|ui| {
         ui.label("Corpus Dir");
-        let dir_resp = ui.text_edit_singleline(&mut app.similarity_dir);
-        ui.ctx().accesskit_node_builder(dir_resp.id, |node| {
-            node.set_label("Corpus Directory");
-        });
+        TextField::new("Corpus Directory", Bind::bound(&mut app.similarity_dir)).show(ui);
     });
     if primary_button(ui, "Check Similarity", !app.session.doc().is_empty()).clicked() {
         app.check_similarity();
