@@ -15,11 +15,13 @@
 mod hotkey_overlay;
 mod mcp;
 mod native_messaging;
+mod output;
 mod quick_review;
 
 use std::process::ExitCode;
 
 use grammarcraft_engine::{Session, registry};
+use output::OutputFormat;
 use serde_json::{Value, json};
 
 const USAGE: &str = "\
@@ -28,8 +30,8 @@ grammarcraft-cli — grammarcraft from the command line
 USAGE:
   grammarcraft-cli commands                                                list every command as JSON
   grammarcraft-cli run <id> [json]                                         run a command with its parameters (default {})
-  grammarcraft-cli check <file>                                            open and analyze a text/markdown/.docx/.grammarcraft.json file
-  grammarcraft-cli quick-review (--text <TEXT> | --file <PATH> | --stdin) [--lang <TAG>] [--audience <AUDIENCE>] [--formality <FORMALITY>] [--apply-all]
+  grammarcraft-cli check <file> [--format text|json|sarif]                 open and analyze a text/markdown/.docx/.grammarcraft.json file
+  grammarcraft-cli quick-review (--text <TEXT> | --file <PATH> | --stdin) [--lang <TAG>] [--audience <AUDIENCE>] [--formality <FORMALITY>] [--format text|json|sarif] [--apply-all]
   grammarcraft-cli hotkey-overlay [--hotkey <BINDING>] [--once] [--mock-trigger] [--mock-text <TEXT>]
   grammarcraft-cli stats                                                   measure text stats in a fresh session
   grammarcraft-cli mcp --automation-read-root <dir> --automation-write-root <dir>
@@ -68,7 +70,7 @@ fn dispatch(args: Vec<String>) -> Result<ExitCode, String> {
             args.get(1).map(String::as_str),
             args.get(2).map(String::as_str),
         ),
-        "check" => check_file(args.get(1).map(String::as_str)),
+        "check" => check_file(&args[1..]),
         "quick-review" => quick_review::run(&args[1..]),
         "hotkey-overlay" => hotkey_overlay::run(&args[1..]),
         "stats" => run_command(Some("stats.measure"), None),
@@ -86,16 +88,48 @@ fn dispatch(args: Vec<String>) -> Result<ExitCode, String> {
     }
 }
 
-fn check_file(path: Option<&str>) -> Result<ExitCode, String> {
+fn check_file(args: &[String]) -> Result<ExitCode, String> {
+    let mut path: Option<&str> = None;
+    let mut format = OutputFormat::Json;
+    let mut i = 0usize;
+    while let Some(arg) = args.get(i) {
+        match arg.as_str() {
+            "--format" => {
+                i += 1;
+                let raw = args
+                    .get(i)
+                    .map(String::as_str)
+                    .ok_or_else(|| format!("`--format` requires a value\n\n{USAGE}"))?;
+                format = OutputFormat::parse(raw)?;
+            }
+            other if other.starts_with("--format=") => {
+                format = OutputFormat::parse(other.trim_start_matches("--format="))?;
+            }
+            other if other.starts_with('-') => {
+                return Err(format!("unknown `check` option `{other}`\n\n{USAGE}"));
+            }
+            file if path.is_none() => path = Some(file),
+            extra => return Err(format!("unexpected argument `{extra}`\n\n{USAGE}")),
+        }
+        i += 1;
+    }
     let path = path.ok_or_else(|| format!("`check` needs a file path\n\n{USAGE}"))?;
+
     let mut session = Session::new();
     if let Err(error) = session.run("doc.open", &json!({ "path": path })) {
         eprintln!("error: {error}");
         return Ok(ExitCode::FAILURE);
     }
+    let doc_text = session.doc().text().to_owned();
     match session.run("review.check", &json!({})) {
         Ok(report) => {
-            println!("{}", pretty(&report)?);
+            match format {
+                OutputFormat::Json => println!("{}", pretty(&report)?),
+                OutputFormat::Text => print!("{}", output::render_text(&report, &doc_text, path)),
+                OutputFormat::Sarif => {
+                    println!("{}", output::render_sarif(&report, &doc_text, path)?);
+                }
+            }
             Ok(ExitCode::SUCCESS)
         }
         Err(error) => {

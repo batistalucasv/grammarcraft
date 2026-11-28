@@ -3503,6 +3503,7 @@ name = "grammarcraft-rules"
 version = "0.1.0"
 dependencies = [
  "craft-proof",
+ "craft-text",
  "grammarcraft-core",
  "regex",
 ]

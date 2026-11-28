@@ -542,3 +542,24 @@ fn overlay_mode_captures_translates_and_replaces_external_selection() {
         Some("Hello, good morning.")
     );
 }
+
+#[test]
+fn craft_select_pickers_update_language_and_goals() {
+    use grammarcraft_core::Audience;
+
+    let mut h = harness_with_text("We write cleanly.");
+
+    h.get_by_label("Document Language").click();
+    h.run_steps(2);
+    h.get_by_label("pt-BR — Português (BR)").click();
+    h.run_steps(2);
+    assert_eq!(h.state().session.language_tag(), "pt-BR");
+
+    h.get_by_label("Goals & Score").click();
+    h.run_steps(2);
+    h.get_by_role_and_label(Role::ComboBox, "Audience").click();
+    h.run_steps(2);
+    h.get_by_label("specialized").click();
+    h.run_steps(2);
+    assert_eq!(h.state().session.goals().audience, Audience::Specialized);
+}
