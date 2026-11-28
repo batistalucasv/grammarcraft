@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="en-US" xmlns="http://wixtoolset.org/schemas/v4/wxl">
+  <String Id="WelcomeDlgTitle" Value="{\WixUI_Font_Bigger}Welcome to the [ProductName] [GrammarcraftVersion] Setup Wizard" />
+  <String Id="WelcomeDlgDescription" Value="The Setup Wizard will install [ProductName] version [GrammarcraftVersion] on your computer. Click Next to continue or Cancel to exit the Setup Wizard." />
+  <String Id="VerifyReadyDlgInstallTitle" Value="{\WixUI_Font_Title}Ready to install [ProductName] [GrammarcraftVersion]" />
+  <String Id="ExitDialogTitle" Value="{\WixUI_Font_Bigger}Completed the [ProductName] [GrammarcraftVersion] Setup Wizard" />
+</WixLocalization>

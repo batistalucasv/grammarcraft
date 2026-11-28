@@ -1,0 +1,71 @@
+{
+  "id": "grammarcraft",
+  "name": "GrammarCraft",
+  "upgradeCode": "E7C4B9A2-3D51-4F86-9E12-6A8C4B0D9F31",
+  "sources": [
+    "grammarcraft.wxs"
+  ],
+  "icon": "assets/app-icon/grammarcraft.ico",
+  "localization": [
+    "grammarcraft.en-us.wxl"
+  ],
+  "extensions": [
+    "UI",
+    "Util"
+  ],
+  "payloads": [
+    "grammarcraft-cli.exe",
+    "grammarcraft.exe"
+  ],
+  "registry": [
+    [
+      "-1",
+      "Software\\Classes\\Applications\\grammarcraft.exe",
+      "FriendlyAppName",
+      "GrammarCraft"
+    ],
+    [
+      "-1",
+      "Software\\Classes\\Applications\\grammarcraft.exe\\shell\\open\\command",
+      "",
+      "\"[#GrammarcraftExe]\" \"%1\""
+    ],
+    [
+      "-1",
+      "Software\\Classes\\Applications\\grammarcraft.exe\\SupportedTypes",
+      ".grammarcraft",
+      ""
+    ],
+    [
+      "-1",
+      "Software\\Classes\\Applications\\grammarcraft.exe\\SupportedTypes",
+      ".txt",
+      ""
+    ],
+    [
+      "-1",
+      "Software\\Classes\\Applications\\grammarcraft.exe\\SupportedTypes",
+      ".md",
+      ""
+    ],
+    [
+      "-1",
+      "Software\\Classes\\Applications\\grammarcraft.exe\\SupportedTypes",
+      ".docx",
+      ""
+    ],
+    [
+      "-1",
+      "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\grammarcraft.exe",
+      "",
+      "[#GrammarcraftExe]"
+    ],
+    [
+      "-1",
+      "Software\\GrammarCraft",
+      "InstallDir",
+      "[INSTALLFOLDER]"
+    ]
+  ],
+  "mode": "dualScope"
+}

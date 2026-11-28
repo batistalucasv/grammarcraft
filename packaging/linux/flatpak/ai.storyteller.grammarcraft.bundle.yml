@@ -1,0 +1,27 @@
+# Flatpak manifest for the single-file bundle attached to every GitHub release
+# (grammarcraft-<version>-linux-<arch>.flatpak). Build it with packaging/linux/flatpak-bundle.sh.
+id: ai.storyteller.grammarcraft
+runtime: org.freedesktop.Platform
+runtime-version: '26.08'
+sdk: org.freedesktop.Sdk
+command: grammarcraft
+finish-args:
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  - --filesystem=xdg-documents
+modules:
+  - name: grammarcraft
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 bin/grammarcraft /app/bin/grammarcraft
+      - install -Dm755 bin/grammarcraft-cli /app/bin/grammarcraft-cli
+      - install -Dm644 share/applications/ai.storyteller.grammarcraft.desktop /app/share/applications/ai.storyteller.grammarcraft.desktop
+      - install -Dm644 share/mime/packages/ai.storyteller.grammarcraft.xml /app/share/mime/packages/ai.storyteller.grammarcraft.xml
+      - install -Dm644 share/metainfo/ai.storyteller.grammarcraft.metainfo.xml /app/share/metainfo/ai.storyteller.grammarcraft.metainfo.xml
+      - mkdir -p /app/share/icons /app/share/doc && cp -R share/icons/hicolor /app/share/icons/ && cp -R share/doc/grammarcraft /app/share/doc/
+    sources:
+      - type: dir
+        path: stage
