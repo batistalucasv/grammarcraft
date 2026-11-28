@@ -345,3 +345,48 @@ fn control_server_rejects_bad_token_and_dispatches_session_commands() {
     );
     assert_eq!(harness.state().editor_text, "She recieve the report.");
 }
+
+#[test]
+fn quick_review_mode_parses_flags_renders_cards_and_applies_all_via_session_run() {
+    use crate::control::parse_launch_args;
+
+    let original = "Teh cat recieve teh package.";
+    let args: Vec<String> = vec![
+        "--quick-review".into(),
+        "--text".into(),
+        original.into(),
+        "--from-clipboard".into(),
+    ];
+    let launch = parse_launch_args(&args).expect("quick-review launch args");
+    assert!(launch.quick_review);
+    assert_eq!(launch.initial_text.as_deref(), Some(original));
+    assert!(launch.from_clipboard);
+
+    let app = GrammarCraftApp::with_initial_text(original).with_quick_review(true);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(460.0, 540.0))
+        .with_context_setup(|ctx| {
+            craft::ui::shell::embed::install(ctx, headless_install_spec(), &ui_fonts())
+                .expect("craft runtime installs on test context");
+        })
+        .build_eframe(move |_| app);
+    h.run_steps(4);
+
+    assert!(h.query_by_label("Apply All").is_some());
+    assert!(h.query_by_label("Paste & Review").is_some());
+    assert!(h.query_by_label("Copy Text").is_some());
+    assert!(h.query_by_label("Apply: The").is_some());
+    assert!(h.query_by_label("Apply: receive").is_some());
+
+    h.get_by_label("Apply All").click();
+    h.run_steps(4);
+
+    let updated = h.state().session.doc().text().to_owned();
+    assert!(!updated.contains("recieve"), "unexpected typo: {updated}");
+    assert!(!updated.contains("Teh"), "unexpected Teh: {updated}");
+    assert_eq!(h.state().editor_text, updated);
+
+    h.get_by_label("Undo").click();
+    h.run_steps(3);
+    assert_eq!(h.state().session.doc().text(), original);
+}

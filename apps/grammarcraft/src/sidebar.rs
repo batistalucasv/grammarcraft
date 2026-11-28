@@ -113,7 +113,7 @@ fn show_category_filters(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
     });
 }
 
-fn show_issue_card(app: &mut GrammarCraftApp, ui: &mut egui::Ui, issue: &Issue) {
+pub(crate) fn show_issue_card(app: &mut GrammarCraftApp, ui: &mut egui::Ui, issue: &Issue) {
     let style = category_style(issue.category, issue.severity, &app.colors);
     let selected = app.selected_issue_id == Some(issue.id.get());
     let stroke_color = if selected {

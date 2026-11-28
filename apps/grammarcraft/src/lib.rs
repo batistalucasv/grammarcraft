@@ -13,6 +13,7 @@
 
 pub mod control;
 pub mod editor;
+pub mod quick_review;
 pub mod sidebar;
 pub mod state;
 pub mod theme_bridge;
@@ -38,15 +39,38 @@ pub fn app_spec() -> AppSpec {
     )
 }
 
+pub fn quick_review_app_spec() -> AppSpec {
+    AppSpec::new(
+        "org.artcraft.grammarcraft",
+        "GrammarCraft — Quick Review",
+        Defaults::new([460.0, 540.0], [360.0, 420.0]),
+    )
+}
+
 pub fn run_desktop() -> eframe::Result {
     run_desktop_with(control::LaunchArgs::default())
 }
 
 pub fn run_desktop_with(launch: control::LaunchArgs) -> eframe::Result {
-    run(app_spec(), move |ctx| {
-        let mut app = GrammarCraftApp::new();
+    let spec = if launch.quick_review {
+        quick_review_app_spec()
+    } else {
+        app_spec()
+    };
+    run(spec, move |ctx| {
+        let mut app = GrammarCraftApp::new().with_quick_review(launch.quick_review);
         app.session.enable_desktop_ai_storage();
-        if let Some(first_file) = launch.files.first()
+        if launch.quick_review {
+            ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
+                egui::WindowLevel::AlwaysOnTop,
+            ));
+        }
+        if let Some(text) = &launch.initial_text {
+            app.editor_text = text.clone();
+            app.set_text_and_check();
+        } else if launch.from_clipboard {
+            app.paste_clipboard_and_review(ctx);
+        } else if let Some(first_file) = launch.files.first()
             && app.run_and_report("doc.open", json!({ "path": first_file }))
         {
             app.current_path = Some(first_file.clone());

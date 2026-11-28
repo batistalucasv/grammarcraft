@@ -13,6 +13,7 @@
 )]
 
 mod mcp;
+mod native_messaging;
 
 use std::process::ExitCode;
 
@@ -28,6 +29,7 @@ USAGE:
   grammarcraft-cli check <file>                                            open and analyze a text/markdown/.docx/.grammarcraft.json file
   grammarcraft-cli stats                                                   measure text stats in a fresh session
   grammarcraft-cli mcp --automation-read-root <dir> --automation-write-root <dir>
+  grammarcraft-cli native-messaging                                        WebExtension Native Messaging stdio host (4-byte LE framing)
   grammarcraft-cli -h | --help                                             this text
   grammarcraft-cli -V | --version                                          print version
 
@@ -65,6 +67,7 @@ fn dispatch(args: Vec<String>) -> Result<ExitCode, String> {
         "check" => check_file(args.get(1).map(String::as_str)),
         "stats" => run_command(Some("stats.measure"), None),
         "mcp" => mcp::run(&args[1..]),
+        "native-messaging" => native_messaging::run(&args[1..]),
         "-h" | "--help" | "help" => {
             print!("{USAGE}");
             Ok(ExitCode::SUCCESS)
