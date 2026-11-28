@@ -487,3 +487,58 @@ fn live_translate_translates_completed_sentence_and_supports_immediate_undo() {
     assert_eq!(h.state().session.doc().text(), "Olá, bom dia.");
     assert_eq!(h.state().editor_text, "Olá, bom dia.");
 }
+
+#[test]
+fn overlay_mode_captures_translates_and_replaces_external_selection() {
+    use std::sync::Arc;
+
+    use grammarcraft_engine::{AnchorRect, MockOsTextBridge, OsSelection, OsTextBridge};
+
+    use crate::apply_launch_args;
+    use crate::control::parse_launch_args;
+
+    let bridge = Arc::new(MockOsTextBridge::new(Some(OsSelection {
+        text: "Olá, bom dia.".to_owned(),
+        anchor: Some(AnchorRect {
+            x: 120.0,
+            y: 80.0,
+            width: 140.0,
+            height: 24.0,
+        }),
+        app_name: Some("Notes".to_owned()),
+    })));
+    let launch = parse_launch_args(&["--overlay".into()]).expect("parse --overlay");
+    assert!(launch.overlay);
+
+    let bridge_for_app = Arc::clone(&bridge);
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(460.0, 540.0))
+        .with_context_setup(|ctx| {
+            craft::ui::shell::embed::install(ctx, headless_install_spec(), &ui_fonts())
+                .expect("craft runtime installs on test context");
+        })
+        .build_eframe(move |cc| {
+            let mut app = GrammarCraftApp::new().with_overlay_mode(launch.overlay);
+            app.session
+                .set_os_bridge(bridge_for_app as Arc<dyn OsTextBridge>);
+            app.set_live_translation(true, "en");
+            apply_launch_args(&mut app, &cc.egui_ctx, &launch);
+            app
+        });
+    h.run_steps(4);
+
+    assert!(h.state().overlay_mode);
+    assert_eq!(h.state().session.doc().text(), "Hello, good morning.");
+    assert_eq!(h.state().editor_text, "Hello, good morning.");
+    assert!(h.state().session.last_overlay_anchor().is_some());
+    assert!(h.query_by_label("Capture Selection").is_some());
+    assert!(h.query_by_label("Replace in App").is_some());
+
+    h.get_by_label("Replace in App").click();
+    h.run_steps(3);
+
+    assert_eq!(
+        bridge.last_replaced().as_deref(),
+        Some("Hello, good morning.")
+    );
+}

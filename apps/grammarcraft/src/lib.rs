@@ -47,6 +47,14 @@ pub fn quick_review_app_spec() -> AppSpec {
     )
 }
 
+pub fn overlay_app_spec() -> AppSpec {
+    AppSpec::new(
+        "org.artcraft.grammarcraft",
+        "GrammarCraft — OS Overlay",
+        Defaults::new([460.0, 540.0], [360.0, 420.0]),
+    )
+}
+
 pub fn run_desktop() -> eframe::Result {
     run_desktop_with(control::LaunchArgs::default())
 }
@@ -56,12 +64,15 @@ pub fn apply_launch_args(
     ctx: &egui::Context,
     launch: &control::LaunchArgs,
 ) {
-    if launch.quick_review {
+    if launch.quick_review || launch.overlay {
         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
             egui::WindowLevel::AlwaysOnTop,
         ));
     }
-    if let Some(text) = &launch.initial_text {
+    if launch.overlay {
+        app.overlay_mode = true;
+        app.capture_os_selection(ctx);
+    } else if let Some(text) = &launch.initial_text {
         app.editor_text = text.clone();
         app.set_text_and_check();
     } else if launch.from_clipboard {
@@ -75,13 +86,17 @@ pub fn apply_launch_args(
 }
 
 pub fn run_desktop_with(launch: control::LaunchArgs) -> eframe::Result {
-    let spec = if launch.quick_review {
+    let spec = if launch.overlay {
+        overlay_app_spec()
+    } else if launch.quick_review {
         quick_review_app_spec()
     } else {
         app_spec()
     };
     run(spec, move |ctx| {
-        let mut app = GrammarCraftApp::new().with_quick_review(launch.quick_review);
+        let mut app = GrammarCraftApp::new()
+            .with_quick_review(launch.quick_review)
+            .with_overlay_mode(launch.overlay);
         app.session.enable_desktop_ai_storage();
         apply_launch_args(&mut app, ctx, &launch);
         if let Some(port) = launch.control.port {

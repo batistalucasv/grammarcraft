@@ -62,10 +62,13 @@ fn the_registry_reports_every_command() {
         "translate.configure",
         "translate.live",
         "translate.status",
+        "overlay.status",
+        "overlay.capture",
+        "overlay.apply",
     ] {
         assert!(ids.contains(&expected), "missing `{expected}` in {ids:?}");
     }
-    assert_eq!(ids.len(), 39);
+    assert_eq!(ids.len(), 42);
     assert_eq!(ids.len(), registry().all().len());
 }
 
@@ -1018,4 +1021,59 @@ fn live_translation_remote_provider_requires_consent_and_uses_mock_provider() {
         session.doc().text(),
         "A modularidade garante manutenção previsível."
     );
+}
+
+#[test]
+fn overlay_capture_reviews_translates_and_replaces_external_selection() {
+    use std::sync::Arc;
+
+    use crate::{AnchorRect, MockOsTextBridge, OsSelection};
+
+    let anchor = AnchorRect {
+        x: 100.0,
+        y: 64.0,
+        width: 180.0,
+        height: 22.0,
+    };
+    let bridge = Arc::new(MockOsTextBridge::new(Some(OsSelection {
+        text: "Teh system works. Olá, bom dia.".to_owned(),
+        anchor: Some(anchor),
+        app_name: Some("Notes".to_owned()),
+    })));
+
+    let mut session = Session::new();
+    session.set_os_bridge(Arc::clone(&bridge) as Arc<dyn crate::OsTextBridge>);
+
+    let status = run(&mut session, "overlay.status", json!({})).expect("overlay status");
+    assert_eq!(status["adapter"], "mock-os-bridge");
+    assert_eq!(status["capabilities"]["read_selection"], true);
+    assert_eq!(status["capabilities"]["replace_selection"], true);
+    assert_eq!(status["capabilities"]["anchor_rect"], true);
+
+    run(
+        &mut session,
+        "translate.configure",
+        json!({ "enabled": true, "target_lang": "en" }),
+    )
+    .expect("enable live translation");
+
+    let captured = run(&mut session, "overlay.capture", json!({})).expect("overlay capture");
+    assert_eq!(captured["captured"], true);
+    assert_eq!(captured["translated"], true);
+    assert_eq!(captured["app_name"], "Notes");
+    assert_eq!(session.last_overlay_anchor(), Some(anchor));
+    assert_eq!(captured["text"], "Teh system works. Hello, good morning.");
+    assert!(
+        captured["issues"]
+            .as_array()
+            .is_some_and(|arr| arr.iter().any(|i| i["excerpt"] == "Teh"))
+    );
+
+    let applied = run(&mut session, "overlay.apply", json!({ "apply_all": true }))
+        .expect("overlay apply with review.apply_all");
+    assert_eq!(applied["applied"], true);
+    let final_text = applied["text"].as_str().expect("applied text");
+    assert!(!final_text.contains("Teh"), "{final_text}");
+    assert!(final_text.contains("Hello, good morning."), "{final_text}");
+    assert_eq!(bridge.last_replaced().as_deref(), Some(final_text));
 }

@@ -115,6 +115,7 @@ pub struct GrammarCraftApp {
     pub status_notice: Option<(String, bool)>,
     pub host: Arc<Host>,
     pub quick_review: bool,
+    pub overlay_mode: bool,
     pub last_live_translated: Option<String>,
     pub(crate) dialogs: Option<Dialogs<FileAction>>,
     pub(crate) control: Option<ControlChannel>,
@@ -154,6 +155,7 @@ impl GrammarCraftApp {
             status_notice: None,
             host: build_host(),
             quick_review: false,
+            overlay_mode: false,
             last_live_translated: None,
             dialogs: None,
             control: None,
@@ -172,6 +174,11 @@ impl GrammarCraftApp {
 
     pub fn with_quick_review(mut self, enabled: bool) -> Self {
         self.quick_review = enabled;
+        self
+    }
+
+    pub fn with_overlay_mode(mut self, enabled: bool) -> Self {
+        self.overlay_mode = enabled;
         self
     }
 
@@ -375,6 +382,32 @@ impl GrammarCraftApp {
             Err(err) => {
                 self.status_notice = Some((format!("Clipboard unavailable: {err:?}"), true));
             }
+        }
+    }
+
+    pub fn capture_os_selection(&mut self, ctx: &egui::Context) {
+        if self.run_and_report("overlay.capture", json!({})) {
+            self.selected_issue_id = None;
+            self.highlight_span = None;
+            self.sync_editor_from_session();
+            self.last_live_translated = Some(self.editor_text.clone());
+            if let Some(anchor) = self.session.last_overlay_anchor() {
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(
+                    anchor.x,
+                    anchor.y + anchor.height + 8.0,
+                )));
+            }
+            let notice = match self.session.last_overlay_app() {
+                Some(app_name) => format!("Captured selection from {app_name}"),
+                None => "Captured external selection".to_owned(),
+            };
+            self.status_notice = Some((notice, false));
+        }
+    }
+
+    pub fn replace_os_selection(&mut self) {
+        if self.run_and_report("overlay.apply", json!({ "apply_all": false })) {
+            self.status_notice = Some(("Replaced selection in active app".to_owned(), false));
         }
     }
 
@@ -786,7 +819,7 @@ impl GrammarCraftApp {
         sync_egui_visuals(&ctx, &self.colors);
         self.handle_escape_key(&ctx);
 
-        if self.quick_review {
+        if self.quick_review || self.overlay_mode {
             egui::CentralPanel::default().show(ui, |ui| {
                 crate::quick_review::show(self, ui);
             });
@@ -830,11 +863,12 @@ impl GrammarCraftApp {
         }
         if self.path_bar_mode.is_some() {
             self.path_bar_mode = None;
-        } else if self.quick_review {
+        } else if self.quick_review || self.overlay_mode {
             ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
             self.selected_issue_id = None;
             self.highlight_span = None;
             self.quick_review = false;
+            self.overlay_mode = false;
             self.status_notice = Some(("Closed Quick Review".to_owned(), false));
             ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
                 egui::WindowLevel::Normal,

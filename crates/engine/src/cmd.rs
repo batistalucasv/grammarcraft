@@ -5,8 +5,9 @@ use std::sync::OnceLock;
 
 use grammarcraft_core::{
     AiLocalityMode, AiMode, Audience, CitationStyle, Context, CoreError, Formality,
-    IgnoredIssueKey, Issue, IssueCategory, IssueId, Purpose, StyleRule, StyleRuleKind, TextStats,
-    WritingGoals, format_bibliography, parse_bibtex_entries, validate_citations, validate_lang_tag,
+    IgnoredIssueKey, Issue, IssueCategory, IssueId, MAX_DOCUMENT_BYTES, Purpose, StyleRule,
+    StyleRuleKind, TextStats, WritingGoals, format_bibliography, parse_bibtex_entries,
+    validate_citations, validate_lang_tag,
 };
 use grammarcraft_rules::{AnalysisReport, check_local_similarity, validate_style_rule};
 use serde_json::{Value, json};
@@ -233,6 +234,14 @@ fn specs() -> Vec<CommandSpec> {
         CommandSpec::new("translate.status", "Live Translation Status", "Review › Translate", translate_status)
             .params("{}")
             .pure(),
+        CommandSpec::new("overlay.status", "OS Overlay Bridge Status", "Overlay › Bridge", overlay_status)
+            .params("{}")
+            .pure(),
+        CommandSpec::new("overlay.capture", "Capture External OS Selection", "Overlay › Bridge", overlay_capture)
+            .params(r#"{"auto_translate"?: boolean}"#),
+        CommandSpec::new("overlay.apply", "Replace External OS Selection", "Overlay › Bridge", overlay_apply)
+            .params(r#"{"apply_all"?: boolean}"#)
+            .when(require_non_empty_doc),
     ]
 }
 
@@ -935,6 +944,108 @@ fn translate_status_json(session: &Session) -> Value {
         "target_lang": cfg.target_lang,
         "cloud_consent_granted": cloud_consent_granted,
     })
+}
+
+fn overlay_status(session: &mut Session, params: &Value) -> CmdResult {
+    p::require_object_or_empty(params)?;
+    Ok(json!({
+        "adapter": session.os_bridge.adapter_name(),
+        "capabilities": session.os_bridge.capabilities(),
+        "last_anchor": session.last_overlay_anchor,
+        "last_app": session.last_overlay_app,
+    }))
+}
+
+fn overlay_capture(session: &mut Session, params: &Value) -> CmdResult {
+    p::require_object_or_empty(params)?;
+    let auto_translate =
+        p::opt_bool(params, "auto_translate")?.unwrap_or(session.doc.live_translation.enabled);
+
+    let Some(selection) = session
+        .os_bridge
+        .capture_selection()
+        .map_err(CmdError::Failed)?
+    else {
+        return Err(CmdError::Disabled(
+            "no external OS selection available".to_owned(),
+        ));
+    };
+
+    if selection.text.len() > MAX_DOCUMENT_BYTES {
+        return Err(CoreError::TextTooLong {
+            max: MAX_DOCUMENT_BYTES,
+        }
+        .into());
+    }
+    if selection.text.trim().is_empty() {
+        return Err(CmdError::Disabled(
+            "captured external selection is empty".to_owned(),
+        ));
+    }
+
+    let mut candidate = session.doc.clone();
+    candidate.set_text(&selection.text)?;
+    session.push_undo();
+    session.doc = candidate;
+    session.invalidate_report();
+    session.last_overlay_anchor = selection.anchor;
+    session.last_overlay_app = selection.app_name.clone();
+
+    let mut translation_json = Value::Null;
+    let mut translated = false;
+    if auto_translate {
+        match translate::translate_live_with(session, None, true, true) {
+            Ok(live_res) => {
+                translated = live_res.applied;
+                translation_json = json!({
+                    "source_text": live_res.source_text,
+                    "translated_text": live_res.translated_text,
+                    "source_lang": live_res.source_lang,
+                    "target_lang": live_res.target_lang,
+                    "backend": live_res.backend,
+                    "applied": live_res.applied,
+                });
+            }
+            Err(CmdError::Disabled(_)) => {}
+            Err(err) => return Err(err),
+        }
+    }
+
+    let (report, doc_text) = session.analyze(None)?;
+    let report_val = report_json(report, doc_text);
+    Ok(json!({
+        "captured": true,
+        "adapter": session.os_bridge.adapter_name(),
+        "app_name": selection.app_name,
+        "anchor": selection.anchor,
+        "translated": translated,
+        "translation": translation_json,
+        "text": session.doc.text(),
+        "language": report_val.get("language").cloned().unwrap_or(Value::Null),
+        "stats": report_val.get("stats").cloned().unwrap_or(Value::Null),
+        "issues": report_val.get("issues").cloned().unwrap_or_else(|| json!([])),
+        "score": report_val.get("score").cloned().unwrap_or(Value::Null),
+        "tone": report_val.get("tone").cloned().unwrap_or(Value::Null),
+    }))
+}
+
+fn overlay_apply(session: &mut Session, params: &Value) -> CmdResult {
+    p::require_object_or_empty(params)?;
+    let apply_all = p::opt_bool(params, "apply_all")?.unwrap_or(false);
+    if apply_all {
+        let _ = review_apply_all(session, &json!({}))?;
+    }
+    let final_text = session.doc.text().to_owned();
+    session
+        .os_bridge
+        .replace_selection(&final_text)
+        .map_err(CmdError::Failed)?;
+    Ok(json!({
+        "applied": true,
+        "adapter": session.os_bridge.adapter_name(),
+        "text": final_text,
+        "bytes": final_text.len(),
+    }))
 }
 
 fn report_json(report: &AnalysisReport, doc_text: &str) -> Value {

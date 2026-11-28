@@ -49,7 +49,12 @@ pub fn show(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
 fn show_header(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
-        ui.strong("Quick Review");
+        let title = if app.overlay_mode {
+            "OS Overlay"
+        } else {
+            "Quick Review"
+        };
+        ui.strong(title);
         let score = app.writing_score().score;
         let tone = if score >= 85 {
             Tone::Good
@@ -88,6 +93,12 @@ fn show_action_bar(app: &mut GrammarCraftApp, ui: &mut egui::Ui, ctx: &egui::Con
         }
         if craft_button(ui, "Copy Text", has_text).clicked() {
             app.copy_text_to_clipboard(ctx);
+        }
+        if craft_button(ui, "Capture Selection", true).clicked() {
+            app.capture_os_selection(ctx);
+        }
+        if craft_button(ui, "Replace in App", has_text).clicked() {
+            app.replace_os_selection();
         }
     });
 }

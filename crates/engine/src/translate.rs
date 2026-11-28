@@ -277,8 +277,17 @@ pub(crate) fn translate_live(
     explicit_text: Option<&str>,
     apply: bool,
 ) -> Result<TranslationResult, CmdError> {
+    translate_live_with(session, explicit_text, apply, false)
+}
+
+pub(crate) fn translate_live_with(
+    session: &mut Session,
+    explicit_text: Option<&str>,
+    apply: bool,
+    allow_when_disabled: bool,
+) -> Result<TranslationResult, CmdError> {
     let config = session.doc.live_translation.clone();
-    if !config.enabled && explicit_text.is_none() {
+    if !config.enabled && !allow_when_disabled && explicit_text.is_none() {
         return Err(CmdError::Disabled(
             "live translation is disabled; enable it via `translate.configure`".to_owned(),
         ));

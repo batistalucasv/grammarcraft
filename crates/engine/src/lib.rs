@@ -18,6 +18,7 @@ mod cmd;
 mod error;
 pub mod file_access;
 mod io;
+pub mod os_bridge;
 mod translate;
 
 pub use ai::{AiBackend, CraftProviderBackend, LocalOfflineBackend};
@@ -25,6 +26,10 @@ pub use cmd::{CommandSpec, Registry, registry};
 pub use error::{CmdError, CmdResult};
 pub use grammarcraft_core::MAX_DOCUMENT_BYTES;
 pub use grammarcraft_rules::AnalysisReport;
+pub use os_bridge::{
+    AnchorRect, MockOsTextBridge, OsOverlayCapabilities, OsSelection, OsTextBridge,
+    PlatformOsBridge,
+};
 
 use std::collections::VecDeque;
 
@@ -67,6 +72,9 @@ pub struct Session {
     last_similarity: Option<SimilarityReport>,
     last_citations: Vec<String>,
     last_citation_issues: Vec<CitationValidationIssue>,
+    pub(crate) os_bridge: std::sync::Arc<dyn OsTextBridge>,
+    pub(crate) last_overlay_anchor: Option<AnchorRect>,
+    pub(crate) last_overlay_app: Option<String>,
 }
 
 impl Default for Session {
@@ -87,6 +95,9 @@ impl Default for Session {
             last_similarity: None,
             last_citations: Vec::new(),
             last_citation_issues: Vec::new(),
+            os_bridge: std::sync::Arc::new(PlatformOsBridge),
+            last_overlay_anchor: None,
+            last_overlay_app: None,
         }
     }
 }
@@ -94,6 +105,22 @@ impl Default for Session {
 impl Session {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn set_os_bridge(&mut self, bridge: std::sync::Arc<dyn OsTextBridge>) {
+        self.os_bridge = bridge;
+    }
+
+    pub fn os_bridge(&self) -> &dyn OsTextBridge {
+        self.os_bridge.as_ref()
+    }
+
+    pub fn last_overlay_anchor(&self) -> Option<AnchorRect> {
+        self.last_overlay_anchor
+    }
+
+    pub fn last_overlay_app(&self) -> Option<&str> {
+        self.last_overlay_app.as_deref()
     }
 
     pub fn doc(&self) -> &Document {
