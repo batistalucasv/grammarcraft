@@ -5,7 +5,7 @@ use craft::automation::control::ControlChannel;
 use craft::dialogs::{Answer, Dialogs, FileDialog};
 use craft::host::{Host, Wake};
 use craft::ui::contract::{CommandSet as _, Props as _, Show as _};
-use craft::ui::runtime::commands::NavCommand;
+use craft::ui::runtime::commands::{ClipItem, ClipboardHandle, NavCommand};
 use craft::ui::runtime::env::Label;
 use craft::ui::runtime::frame::{FrameInput, FrameOutput};
 use craft::ui::runtime::windows::WindowHost;
@@ -114,6 +114,7 @@ pub struct GrammarCraftApp {
     pub similarity_dir: String,
     pub status_notice: Option<(String, bool)>,
     pub host: Arc<Host>,
+    pub quick_review: bool,
     pub(crate) dialogs: Option<Dialogs<FileAction>>,
     pub(crate) control: Option<ControlChannel>,
     pub(crate) control_server: Option<ControlServer>,
@@ -151,6 +152,7 @@ impl GrammarCraftApp {
             similarity_dir: String::new(),
             status_notice: None,
             host: build_host(),
+            quick_review: false,
             dialogs: None,
             control: None,
             control_server: None,
@@ -164,6 +166,11 @@ impl GrammarCraftApp {
         app.editor_text = text.to_owned();
         app.set_text_and_check();
         app
+    }
+
+    pub fn with_quick_review(mut self, enabled: bool) -> Self {
+        self.quick_review = enabled;
+        self
     }
 
     pub fn with_control(mut self, channel: ControlChannel, server: Option<ControlServer>) -> Self {
@@ -263,6 +270,58 @@ impl GrammarCraftApp {
             self.highlight_span = None;
             self.sync_editor_from_session();
             self.status_notice = Some(("Applied suggestion".to_owned(), false));
+        }
+    }
+
+    pub fn apply_all_suggestions(&mut self) {
+        match self.dispatch("review.apply_all", json!({})) {
+            Ok(result) => {
+                let count = result
+                    .get("applied_count")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0);
+                self.selected_issue_id = None;
+                self.highlight_span = None;
+                self.sync_editor_from_session();
+                self.status_notice = Some((format!("Applied {count} fix(es)"), false));
+            }
+            Err(err) => {
+                self.status_notice = Some((err.to_string(), true));
+            }
+        }
+    }
+
+    pub fn copy_text_to_clipboard(&mut self, ctx: &egui::Context) {
+        let text = self.session.doc().text().to_owned();
+        if text.is_empty() {
+            return;
+        }
+        let handle = ClipboardHandle::of(ctx);
+        match handle.offer(&[ClipItem::Text(Arc::from(text.as_str()))]) {
+            Ok(_) => {
+                self.status_notice = Some(("Copied text to clipboard".to_owned(), false));
+            }
+            Err(_) => {
+                ctx.copy_text(text);
+                self.status_notice = Some(("Copied text to clipboard".to_owned(), false));
+            }
+        }
+    }
+
+    pub fn paste_clipboard_and_review(&mut self, ctx: &egui::Context) {
+        let handle = ClipboardHandle::of(ctx);
+        match handle.read_text() {
+            Ok(Some(text)) if !text.is_empty() => {
+                self.editor_text = text;
+                self.set_text_and_check();
+                self.status_notice = Some(("Loaded text from clipboard".to_owned(), false));
+            }
+            Ok(_) => {
+                self.status_notice = Some(("Clipboard has no plain text".to_owned(), true));
+            }
+            Err(err) => {
+                self.status_notice = Some((format!("Clipboard unavailable: {err:?}"), true));
+            }
         }
     }
 
@@ -658,6 +717,13 @@ impl GrammarCraftApp {
         let ctx = ui.ctx().clone();
         sync_egui_visuals(&ctx, &self.colors);
         self.handle_escape_key(&ctx);
+
+        if self.quick_review {
+            egui::CentralPanel::default().show(ui, |ui| {
+                crate::quick_review::show(self, ui);
+            });
+            return;
+        }
 
         egui::Panel::top("grammarcraft_toolbar").show(ui, |ui| {
             toolbar::show(self, ui);

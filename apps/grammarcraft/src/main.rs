@@ -22,6 +22,9 @@ USAGE:
   grammarcraft [OPTIONS] [FILE]
 
 OPTIONS:
+  --quick-review                     launch compact floating Quick Review popover (460x540, always-on-top)
+  --text <TEXT>                      pre-fill the editor text and run an immediate check
+  --from-clipboard                   load initial text from the clipboard for immediate review
   --control <PORT|auto>              bind a loopback JSON-lines control socket (default: off)
   --control-token <TOKEN>            authentication token for the control socket
   --control-token-file <PATH>        file containing the authentication token

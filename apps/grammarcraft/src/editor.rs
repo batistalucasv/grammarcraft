@@ -6,6 +6,17 @@ use crate::state::{GrammarCraftApp, PaneFocusTarget};
 use crate::theme_bridge::{UnderlinePattern, category_style, with_alpha};
 
 pub fn show(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
+    let avail = ui.available_size();
+    let editor_height = (avail.y - 8.0).max(200.0);
+    show_with_rows(app, ui, 18, editor_height);
+}
+
+pub(crate) fn show_with_rows(
+    app: &mut GrammarCraftApp,
+    ui: &mut egui::Ui,
+    rows: usize,
+    max_height: f32,
+) {
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
             ui.strong("Document");
@@ -19,16 +30,14 @@ pub fn show(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
         });
         ui.add_space(4.0);
 
-        let avail = ui.available_size();
-        let editor_height = (avail.y - 8.0).max(200.0);
         egui::ScrollArea::vertical()
             .id_salt("editor_scroll")
-            .max_height(editor_height)
+            .max_height(max_height)
             .show(ui, |ui| {
                 let output = egui::TextEdit::multiline(&mut app.editor_text)
                     .id_source("document_editor")
                     .desired_width(f32::INFINITY)
-                    .desired_rows(18)
+                    .desired_rows(rows)
                     .hint_text("Type or paste your text here for live proofing...")
                     .show(ui);
 
