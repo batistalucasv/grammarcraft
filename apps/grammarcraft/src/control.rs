@@ -17,6 +17,7 @@ pub struct LaunchArgs {
     pub write_root: Option<PathBuf>,
     pub files: Vec<String>,
     pub quick_review: bool,
+    pub overlay: bool,
     pub initial_text: Option<String>,
     pub from_clipboard: bool,
     pub help: bool,
@@ -32,6 +33,7 @@ pub fn parse_launch_args(raw: &[String]) -> Result<LaunchArgs, (i32, String)> {
             "--help" | "-h" => parsed.help = true,
             "--version" | "-V" => parsed.version = true,
             "--quick-review" => parsed.quick_review = true,
+            "--overlay" => parsed.overlay = true,
             "--from-clipboard" => parsed.from_clipboard = true,
             "--text" => {
                 let val = next_arg(raw, &mut i, "--text")?;
@@ -194,6 +196,7 @@ fn inspect_ui(app: &GrammarCraftApp) -> Value {
     json!({
         "theme": app.theme_mode.label().to_ascii_lowercase(),
         "quick_review": app.quick_review,
+        "overlay": app.overlay_mode,
         "active_tab": tab,
         "score": app.writing_score().score,
         "issue_count": app.issues().len(),

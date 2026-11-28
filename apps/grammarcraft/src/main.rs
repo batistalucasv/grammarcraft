@@ -23,6 +23,7 @@ USAGE:
 
 OPTIONS:
   --quick-review                     launch compact floating Quick Review popover (460x540, always-on-top)
+  --overlay                          launch floating OS Overlay anchored to the active selection and capture it
   --file <PATH>                      open a document path (.txt/.md/.docx/.grammarcraft.json) on startup
   --text <TEXT>                      pre-fill the editor text and run an immediate check
   --from-clipboard                   load initial text from the clipboard for immediate review
