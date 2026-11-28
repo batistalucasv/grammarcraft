@@ -115,7 +115,7 @@ it `.pure()`.
 
 Before every commit: `cargo xtask ci` — `fmt --check`, `clippy -D warnings`, the workspace tests,
 `layers`, `assets`. A change to a domain invariant comes with a test in the crate that owns it.
-Remote CI (`.github/workflows/ci.yml`) installs the Linux native UI system packages required by `egui`/`eframe` on the shared `gate` workflow.
+Remote CI (`.github/workflows/ci.yml`) installs the Linux native UI system packages required by `egui`/`eframe` on the shared `gate` workflow, and `.github/workflows/release.yml` wires the shared `craft-common-actions` release workflow.
 
 ## Adding a crate
 
