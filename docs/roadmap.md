@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **Linux/Flatpak/Windows packaging scripts, 12 hicolor/ICO/1024px icons, and `grammarcraft-cli -V/--version` implemented on `feat/packaging-release-dryrun` (PR #12 pending merge); `release.yml` `dry-run` verification on `main`, `packaging/macos/`, concrete `rten` ONNX NLP runner, external upstream PRs (`craft-proof`/`craft-i18n`/`craft-ai-agents`), full `craft-design-lint` clearance, Rule 4 searches, and post-M5 OS overlay remain open.**
+Status: **M0–M5 core complete (`release.yml` `dry-run=true` green on Linux/Windows/Flatpak in run `46092799920`) and floating `--quick-review` mode, `review.apply_all` (36 commands), `grammarcraft-cli native-messaging`, and `wasm32-unknown-unknown` verification implemented on `feat/quick-review-and-native-messaging` (PR #14 pending merge); M6+ (OS context menu & UIA/`AXUIElement`/`AT-SPI2` overlay, full `WordCraft` integration, RFC-gated browser extension, and live input translation) plus Rule 4 searches and `packaging/macos/` remain open.**
 
 A milestone is done only when every checkbox is verified in a fresh clone (and on GitHub Actions where noted), never when code is merely drafted.
 
@@ -19,26 +19,26 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 - [x] Replace `Note` example with `grammarcraft-core` (L0): `Document`, UTF-8-safe `TextSpan`, `WritingGoals`, `TextStats`, `IssueId`, `IssueCategory`, `Severity`, `Confidence`, `Replacement`, `Issue`, `IssueList`, `ReadabilityMetrics`, `WritingScore`, `ToneProfile`, `PersonalDictionary`, `IgnoredIssueSet`, `CoreError`, and `MAX_*` bounds (zero I/O / zero `serde_json` / zero panics)
 - [x] Implement `grammarcraft-rules` (L1) base pipeline wrapping `craft-proof` with per-paragraph incremental caching, per-document ignore/dictionary isolation, initial clarity/style rules, open readability metrics, `WritingScore`, and span-anchored `ToneProfile`
 - [x] Implement `grammarcraft-engine` (L2): `Session`, bounded undo/redo stack (`MAX_UNDO_STEPS = 200`), versioned atomic save/open (`.grammarcraft.json` v1, `.docx` via `craft-docx` + `craft-wordmodel`, `.txt`, `.md` via `craft-atomic`), and `AutomationRoots` file confinement (`file_access.rs`)
-- [x] Register initial `CommandSpec` catalog (`doc.*`, `history.*`, `goals.set`, `stats.measure`, `review.*`, `dict.*`) with `hostile_parameters_never_panic` passing 100%
-- [x] Ship `grammarcraft-cli` (`check`, `stats`, `run`, `commands`, `-V`/`--version`) + `grammarcraft-cli mcp` refusing startup without `--automation-read-root` and `--automation-write-root`
+- [x] Register `CommandSpec` catalog (`doc.*`, `history.*`, `goals.set`, `stats.measure`, `review.*` incl. `review.apply_all`, `dict.*`, `style.*`, `snippet.*`, `ai.*`, `similarity.check`, `citations.*` — 36 commands) with `hostile_parameters_never_panic` passing 100%
+- [x] Ship `grammarcraft-cli` (`check`, `stats`, `run`, `commands`, `-V`/`--version`, `native-messaging`) + `grammarcraft-cli mcp` refusing startup without `--automation-read-root` and `--automation-write-root`
 - [ ] Integrate `craft-text` UAX #14/#29 segmentation
 
 ## M2 — Deterministic writing & style engine
 
 - [x] Add EN, PT-BR, and ES (`es*`) contextual spelling rules (homophones/paronyms) and regional variant consistency alerts (`en-US`/`en-GB`, `pt-BR`/`pt-PT`)
-- [x] Implement `PersonalDictionary` (`case_sensitive` + `CUSTOM.DIC` UTF-16LE BOM and UTF-8), declarative `StyleGuide` (`PreferredTerm`, `BrandCasing`, linear-time `PatternRule` with `regex = "1"`), and `SnippetCatalog` (`{{placeholder}}` expansion) across L0/L1/L2 + 9 `style.*`/`snippet.*`/`dict.*` commands (23 total)
+- [x] Implement `PersonalDictionary` (`case_sensitive` + `CUSTOM.DIC` UTF-16LE BOM and UTF-8), declarative `StyleGuide` (`PreferredTerm`, `BrandCasing`, linear-time `PatternRule` with `regex = "1"`), and `SnippetCatalog` (`{{placeholder}}` expansion) across L0/L1/L2 + `style.*`/`snippet.*`/`dict.*` commands
 - [x] Implement initial clarity & style analyzers (EN/PT-BR passive voice modulated by `WritingGoals`, long sentences, common redundancies, sliding-window lexical repetition), open readability indices (Flesch, Flesch-Kincaid, Gulpease, reading/speaking times), and transparent 0–100 `WritingScore`
-- [x] Add `Document`-independent `crates/rules/src/upstream_ready.rs` delimiter, straight-quote, bracket-spacing, and comma/semicolon-spacing rules with false-positive guards (EN/PT-BR/ES)
+- [x] Add `Document`-independent `crates/rules/src/upstream_ready.rs` delimiter, straight-quote, bracket-spacing, and comma/semicolon-spacing rules with false-positive guards (EN/PT-BR/ES) and verify `grammarcraft-core` + `grammarcraft-rules` compile cleanly for `wasm32-unknown-unknown`
 - [ ] Expand deterministic grammar rules (agreement, crasis/government in PT-BR, punctuation mechanics, comma splices) and vague-verb/syntactic-rhythm analyzers without copyleft code or rules
 - [ ] Configure `clean-room/derivation/`, `freeze.md`, and `verification.md` corpus accuracy checks plus `SARIF` CLI output
 
 ## M3 — Native `egui` desktop app & accessibility
 
-- [x] Build `apps/grammarcraft` using `craft` (`ui`, `ui-app`, `theme-store`, `dialogs`, `automation`; `craft::ui::shell::app::{AppSpec, run}`) with light/dark themes (`gamma_multiply`) and native file dialogs
+- [x] Build `apps/grammarcraft` using `craft` (`ui`, `ui-app`, `theme-store`, `dialogs`, `automation`; `craft::ui::shell::app::{AppSpec, run}`) with light/dark themes (`gamma_multiply`), native file dialogs, and floating `--quick-review` mode (`460x540`, `AlwaysOnTop`, `--text`, `--from-clipboard`, `Apply All`, `Paste & Review`, `Copy Text`)
 - [x] Migrate toolbar, sidebar, and theme bridge controls to `craft::ui::display::Divider`, `craft::ui::choice::Checkbox`, and `craft::ui::text::TextField` (`Bind::bound`)
 - [x] Render category underlines with redundant encoding (theme colour + distinct stroke pattern + `[!]`/`[~]`/`[i]` severity markers) and interactive suggestion cards
 - [x] Build bidirectional Review Pane (`Alerts`, `Goals & Score`, `Tone Profile`, `Style & Snippets`, `AI Assist`, `Citations & Similarity`) routing every mutation strictly via `Session::run`
-- [x] Verify keyboard navigation (`Tab`/`Shift+Tab`/`F6`/`Escape`), active AccessKit tree, and 8 headless `egui_kittest` / control tests
+- [x] Verify keyboard navigation (`Tab`/`Shift+Tab`/`F6`/`Escape`), active AccessKit tree, and 9 headless `egui_kittest` / control tests
 - [x] Enable authenticated `craft/automation` loopback `--control` channel (`ControlOptions` + `serve` + `ControlChannel` with `--automation-read-root`/`--automation-write-root` confinement and rejection/dispatch tests)
 - [ ] Replace remaining `egui::ComboBox` / `TextEdit::multiline` instances where supported and pass `craft-design-lint` 100%
 
@@ -47,21 +47,27 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 - [x] Expand `ToneProfile` and `inclusive_formality.rs` with formality-mismatch checks (`Formality::Formal`) and opt-in inclusive language rules (`WritingGoals::inclusive_language` in EN/PT-BR/ES)
 - [x] Integrate `craft-ai-core`, `craft-ai-openai` (`OpenAiProvider`), `craft-ai-client` (`AiClient`), and `craft-ai-native` (`ConsentFile`, `HistoryFile`, `SecretStore`) with `LocalOfflineBackend` zero-network default and fail-closed consent/history/secret persistence
 - [x] Integrate `EngineRegistry`/`ModelRunner` (`craft-ai-engine` via `craft-ai-client`) with streaming `sha2::Sha256` weight verification before `load()`, automatic local precedence, and `local_engines` in `ai.status`
-- [x] Ship `ai.status`, `ai.consent`, `ai.rewrite`, `ai.adjustTone`, `ai.summarize`, `ai.expand`, `ai.draft`, `ai.applyResult`, `ai.discardResult` (35 total commands) with word-level `AiDiffHunk` preview, `AI Assist` UI tab, and atomic single-step undo
+- [x] Ship `ai.status`, `ai.consent`, `ai.rewrite`, `ai.adjustTone`, `ai.summarize`, `ai.expand`, `ai.draft`, `ai.applyResult`, `ai.discardResult` with word-level `AiDiffHunk` preview, `AI Assist` UI tab, and atomic single-step undo
 - [x] Ship local N-gram/Jaccard `Similarity Check` (`similarity.check` confined by `AutomationRoots`) and 12-style citation validation/formatting (`BibTeX` parser + `citations.validate`/`citations.format` + `Citations & Similarity` UI tab)
 - [ ] Wire a concrete `craft-ai-engine-rten` / `craft-ai-engine-candle` NLP/tone/GEC `ModelRunner` with permissive open weights downloaded on demand under SHA-256 verification
 
 ## M5 — Ecosystem integration, localization & release packaging
 
-- [x] Author English string catalog (`locales/en/grammarcraft.tsv`), original app icon + 11 derived hicolor/ICO/1024px assets (`assets/app-icon/` attributed in `ATTRIBUTION.md`), Linux/Flatpak/Windows packaging scripts (`packaging/{env.sh,check-icons.sh,linux/,windows/}`), and `.github/workflows/release.yml` calling `storytold/craft-common-actions/.github/workflows/release.yml@main` (with `workflow_dispatch` `dry-run` input)
-- [ ] Upstream `crates/rules/src/upstream_ready.rs` and reusable suggestion-card widgets to `craft-proof` / `craft-libs` (`wordcraft` integration PR)
-- [ ] Register `grammarcraft` in `craft-ai-agents` (`KNOWN_APPS`) for `craft-ai-mcp` launcher discovery
-- [ ] Coordinate translations in `storytold/craft-i18n` from `locales/en/grammarcraft.tsv`
-- [ ] Add `packaging/macos/` assets and confirm green `dry-run` on `release.yml` on `main`
+- [x] Author English string catalog (`locales/en/grammarcraft.tsv`), original app icon + 11 derived hicolor/ICO/1024px assets (`assets/app-icon/` attributed in `ATTRIBUTION.md`), Linux/Flatpak/Windows packaging scripts (`packaging/{env.sh,check-icons.sh,linux/,windows/}`), and `.github/workflows/release.yml`
+- [x] Confirm green `release.yml` `dry-run=true` on `main` across Linux x86_64/aarch64, Windows x64/arm64, and Flatpak x86_64/aarch64 (run `46092799920`)
+- [x] Ship WebExtension stdio `grammarcraft-cli native-messaging` host (4-byte LE `u32` framing, `MAX_NATIVE_MESSAGE_BYTES = 1 MiB`, safe allowlist) as the pure-Rust backend for browser integration
+- [ ] Add `packaging/macos/` assets, coordinate translations in `storytold/craft-i18n`, and register `grammarcraft` in `craft-ai-agents` (`KNOWN_APPS`)
 
-## Deliberately not planned (M0–M5)
+## M6+ — OS context menu & overlay, full WordCraft integration, browser extension & live translation
 
-- **Handwritten JS/TS browser extension or Electron/webview shell:** violates Rust-only Rule 11; any future browser extension requires a dedicated RFC in `storytold/craft-contrib` after M5.
+- [ ] **OS Context Menu & Pure-Rust Native Overlay:** global shortcut, OS context menu (*"Review with GrammarCraft"*), and direct capture/replacement via `UIA` (Windows), `AXUIElement` (macOS), and `AT-SPI2` (Linux) in pure Rust (`unsafe` isolated outside L0–L2, zero JS/Electron/webview)
+- [ ] **Full `WordCraft` Integration:** upstream `crates/rules/src/upstream_ready.rs`, clarity, contextual paronyms, tone, and readability into `craft-proof` / `craft-libs` and wire native proofing/UI improvements in `wordcraft`
+- [ ] **Browser Extension (WASM + Native Messaging):** open RFC in `storytold/craft-contrib` (Rule 11) for a minimal browser extension shim consuming `grammarcraft-cli native-messaging` and the `wasm32` `grammarcraft-core`/`grammarcraft-rules` kernel
+- [ ] **Live Input Translation:** optional real-time typing translation mode across supported apps, `WordCraft`, and browser translating typed input into the chosen target language via the consent-gated hybrid AI pipeline (`ConsentLedger`)
+
+## Deliberately not planned (without dedicated RFC)
+
+- **Handwritten JS/TS browser extension or Electron/webview shell without an approved `storytold/craft-contrib` RFC:** governed by Rust-only Rule 11.
 - **Proprietary web-wide scraping for plagiarism:** violates privacy, licensing, and clean-room boundaries; external web similarity is only considered later via opt-in `SimilarityProvider` connectors with explicit user credentials and consent.
 - **Calibrating scores against proprietary product outputs:** blocked by `standards/clean-room.md` (§ *Measurements*).
 
@@ -77,5 +83,6 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 | 2026-11-27 | M3 | PR #5 merged (`ec52b11`, Linux UI packages in `ci.yml`); PR #6 merged (`8166126`): native `egui` desktop app (`apps/grammarcraft`), `storytold/egui` + `storytold/winit` pins, 5 `egui_kittest` + AccessKit tests |
 | 2026-11-27 | M4 | PR #7 merged (`6df24cd`): `craft-ai-core`/`craft-ai-openai`/`craft-ai-client`, `inclusive_formality.rs`, `similarity.rs`, 12 citation styles + BibTeX, 12 new commands (35 total), and `AI Assist` / `Citations & Similarity` desktop tabs (7 UI tests) |
 | 2026-11-27 | M5 | PR #8 merged (`a10f1f6`): `craft-ai-native` (`ConsentFile`, `HistoryFile`, `SecretStore`), loopback `--control`, `locales/en/grammarcraft.tsv`, `assets/app-icon/grammarcraft.svg`, `packaging/linux/*`; PR #9 merged (`a377174`): `.github/workflows/release.yml` |
-| 2026-11-27 | M2/M3/M4 | PR #10 merged (`b002e5e`): `EngineRegistry`/`ModelRunner` with `sha2` SHA-256 verification and `local_engines` status, `crates/rules/src/upstream_ready.rs` (`check_text`), and `craft::ui` (`Divider`, `Checkbox`, `TextField`, `gamma_multiply`); PR #11 merged (`449c02d`): `workflow_dispatch` `dry-run` input in `release.yml` |
-| 2026-11-27 | M5 | Added `-V`/`--version` to `grammarcraft-cli`, 11 derived hicolor/ICO/1024px icons in `assets/app-icon/` (`ATTRIBUTION.md` 12/12), `packaging/env.sh`, `check-icons.sh`, and Linux/Flatpak/Windows packaging scripts (`cargo xtask ci` green) |
+| 2026-11-27 | M2/M3/M4 | PR #10 merged (`b002e5e`): `EngineRegistry`/`ModelRunner` with `sha2` SHA-256 verification and `local_engines` status, `crates/rules/src/upstream_ready.rs` (`check_text`), and `craft::ui` (`Divider`, `Checkbox`, `TextField`, `gamma_multiply`) migration; PR #11 merged (`449c02d`): `workflow_dispatch` `dry-run` input in `release.yml` |
+| 2026-11-27 | M5 | PR #12 merged (`0af3dbf`): `-V`/`--version` in `grammarcraft-cli`, 12 app icons in `assets/app-icon/` (`ATTRIBUTION.md`), `packaging/env.sh`, `check-icons.sh`, Linux/Flatpak/Windows packaging scripts; PR #13 merged (`38c5d29`) and `release.yml` `dry-run=true` passed on `main` (run `46092799920`) |
+| 2026-11-27 | M3/M5/M6 prep | Added `review.apply_all` (36 commands), floating `--quick-review` desktop mode (`460x540`, `AlwaysOnTop`, `--text`, `--from-clipboard`), `grammarcraft-cli native-messaging` host, `wasm32-unknown-unknown` verification of `core`/`rules`, and M6+ roadmap (`cargo xtask ci` green) |
