@@ -1,6 +1,6 @@
 # Roadmap
 
-Status: **M0–M5 complete, M6-3/M6-4 merged on `main` (Draft Release `v0.1.0` published), and M6-5 (`hotkey.rs` + `grammarcraft-cli hotkey-overlay`, `grammar_deep.rs` + nominalizations/monotonous rhythm, `RtenTextModelRunner` via `rten` `0.28.0`, and `clean-room/` derivation/freeze/verification records) implemented on `feat/m6-5-hotkey-grammar-clarity-onnx`; on-demand real ONNX weights, `packaging/macos/`, `SARIF` CLI, `craft-text` UAX #14/#29, `craft-design-lint` 100%, `storytold/craft-libs#3975` → `wordcraft`, RFC-gated browser extension, and Rule 4 searches remain open.**
+Status: **M0–M5 complete, M6-3/M6-4/M6-5 merged on `main` (Draft Release `v0.1.0` published), and M6-6 (`--format text|json|sarif` SARIF 2.1.0, `craft-text` UAX #14/#29 `segmentation.rs`, `craft::ui::pickers::Select` migration, and `packaging/macos/`) implemented on `feat/m6-6-sarif-craft-text-macos-lint`; on-demand real ONNX weights, `craft-i18n` sync, `craft-ai-agents` registration, `craft-design-lint` 100% (`TextEdit::multiline`), `storytold/craft-libs#3975` → `wordcraft`, RFC-gated browser extension, and Rule 4 searches remain open.**
 
 A milestone is done only when every checkbox is verified in a fresh clone (and on GitHub Actions where noted), never when code is merely drafted.
 
@@ -21,7 +21,7 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 - [x] Implement `grammarcraft-engine` (L2): `Session`, bounded undo/redo stack (`MAX_UNDO_STEPS = 200`), versioned atomic save/open (`.grammarcraft.json` v1, `.docx` via `craft-docx` + `craft-wordmodel`, `.txt`, `.md` via `craft-atomic`), and `AutomationRoots` file confinement (`file_access.rs`)
 - [x] Register `CommandSpec` catalog (`doc.*`, `history.*`, `goals.set`, `stats.measure`, `review.*` incl. `review.apply_all`, `dict.*`, `style.*`, `snippet.*`, `ai.*`, `similarity.check`, `citations.*`, `translate.*`, `overlay.*` — 42 commands) with `hostile_parameters_never_panic` passing 100%
 - [x] Ship `grammarcraft-cli` (`check`, `quick-review`, `stats`, `run`, `commands`, `-V`/`--version`, `native-messaging`) + `grammarcraft-cli mcp` refusing startup without `--automation-read-root` and `--automation-write-root`
-- [ ] Integrate `craft-text` UAX #14/#29 segmentation
+- [x] Integrate `craft-text` (`segment`) UAX #14/#29 line-break and extended-grapheme segmentation (`crates/rules/src/segmentation.rs`) while keeping `grammarcraft-core` + `grammarcraft-rules` `wasm32-unknown-unknown`-clean
 
 ## M2 — Deterministic writing & style engine
 
@@ -31,17 +31,18 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 - [x] Add `Document`-independent `crates/rules/src/upstream_ready.rs` delimiter, straight-quote, bracket-spacing, and comma/semicolon-spacing rules with false-positive guards (EN/PT-BR/ES) and verify `grammarcraft-core` + `grammarcraft-rules` compile cleanly for `wasm32-unknown-unknown`
 - [x] Expand deterministic grammar rules (`grammar_deep.rs`: EN comma splices/agreement/`less` vs `fewer`, PT-BR crasis/existential, ES `dequeísmo`/existential) and clarity/nominalization/syntactic-rhythm analyzers (`clarity.nominalization`, `clarity.monotonous_rhythm` / `has_uniform_sentence_rhythm`) without copyleft code or rules
 - [x] Create `clean-room/derivation/grammar-clarity-rules.md`, `clean-room/freeze.md`, and `clean-room/verification.md` recording deterministic rules and anti-false-positive verification cases
-- [ ] Add `SARIF` CLI output format (`--format text|json|sarif`) and permissive open GEC corpus precision/recall benchmarks
+- [x] Ship `--format text|json|sarif` (SARIF 2.1.0) on `grammarcraft-cli check` and `quick-review` (`apps/grammarcraft-cli/src/output.rs`)
+- [ ] Run permissive open GEC corpus precision/recall benchmarks and record metrics in `clean-room/verification.md`
 
 ## M3 — Native `egui` desktop app & accessibility
 
 - [x] Build `apps/grammarcraft` using `craft` (`ui`, `ui-app`, `theme-store`, `dialogs`, `automation`; `craft::ui::shell::app::{AppSpec, run}`) with light/dark themes (`gamma_multiply`), native file dialogs, floating `--quick-review` mode (`460x540`, `AlwaysOnTop`, `--text`, `--file`, `--from-clipboard`, `Apply All`, `Apply All & Copy`, `Paste & Review`, `Copy Text`, `Escape`), anchored `--overlay` mode (`Capture Selection`, `Replace in App`), and `Live Translate` (`Off | EN | PT-BR | ES`)
-- [x] Migrate toolbar, sidebar, and theme bridge controls to `craft::ui::display::Divider`, `craft::ui::choice::Checkbox`, and `craft::ui::text::TextField` (`Bind::bound`)
+- [x] Migrate toolbar, sidebar, Quick Review, and theme bridge controls to `craft::ui::display::Divider`, `craft::ui::choice::Checkbox`, `craft::ui::text::TextField`, and `craft::ui::pickers::Select` (`Bind::bound` + `Entry::new`)
 - [x] Render category underlines with redundant encoding (theme colour + distinct stroke pattern + `[!]`/`[~]`/`[i]` severity markers) and interactive suggestion cards
 - [x] Build bidirectional Review Pane (`Alerts`, `Goals & Score`, `Tone Profile`, `Style & Snippets`, `AI Assist`, `Citations & Similarity`) routing every mutation strictly via `Session::run`
-- [x] Verify keyboard navigation (`Tab`/`Shift+Tab`/`F6`/`Escape`), active AccessKit tree, and 12 headless `egui_kittest` / control tests
+- [x] Verify keyboard navigation (`Tab`/`Shift+Tab`/`F6`/`Escape`), active AccessKit tree, and 13 headless `egui_kittest` / control tests
 - [x] Enable authenticated `craft/automation` loopback `--control` channel (`ControlOptions` + `serve` + `ControlChannel` with `--automation-read-root`/`--automation-write-root` confinement and rejection/dispatch tests)
-- [ ] Replace remaining `egui::ComboBox` / `TextEdit::multiline` instances where supported and pass `craft-design-lint` 100%
+- [ ] Replace remaining `TextEdit::multiline` instances where supported and pass `craft-design-lint` 100%
 
 ## M4 — Multi-signal tone, hybrid AI assistance & local similarity
 
@@ -58,7 +59,8 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 - [x] Author English string catalog (`locales/en/grammarcraft.tsv`), original app icon + 11 derived hicolor/ICO/1024px assets (`assets/app-icon/` attributed in `ATTRIBUTION.md`), Linux/Flatpak/Windows packaging scripts (`packaging/{env.sh,check-icons.sh,linux/,windows/}`), and `.github/workflows/release.yml`
 - [x] Confirm green `release.yml` `dry-run=true` on `main` across Linux x86_64/aarch64, Windows x64/arm64, and Flatpak x86_64/aarch64 (run `46092799920`)
 - [x] Ship WebExtension stdio `grammarcraft-cli native-messaging` host (4-byte LE `u32` framing, `MAX_NATIVE_MESSAGE_BYTES = 1 MiB`, safe allowlist incl. `translate.*`) as the pure-Rust backend for browser integration
-- [ ] Add `packaging/macos/` assets, coordinate translations in `storytold/craft-i18n`, and register `grammarcraft` in `craft-ai-agents` (`KNOWN_APPS`)
+- [x] Add `packaging/macos/` (`Info.plist.in`, `entitlements.plist`, `package.sh`, `verify.sh`, `import-cert.sh`) for macOS app bundling and signing
+- [ ] Coordinate translations in `storytold/craft-i18n` and register `grammarcraft` in `craft-ai-agents` (`KNOWN_APPS`)
 
 ## M6+ — OS context menu & overlay, full WordCraft integration, browser extension & live translation
 
@@ -94,4 +96,5 @@ A milestone is done only when every checkbox is verified in a fresh clone (and o
 | 2026-11-27 | M6-2 | PR #15 merged (`b44878d`): `grammarcraft-cli quick-review`, desktop `--quick-review --file`, `Apply All & Copy`, `Escape`, and Linux/Windows OS context-menu hooks |
 | 2026-11-28 | M6-3 | PR #16 merged (`b8f76fe`): real-time live translation (`LiveTranslationConfig`, `TranslationResult`, `LocalOfflineTranslator` `pt`/`en`/`es`, `translate_with_cloud` under `ConsentLedger`, `translate.configure`/`live`/`status` — 39 commands, `native-messaging` allowlist, and `Live Translate` UI selector) |
 | 2026-11-28 | M6-4 | PR #17 merged (`f4716d7`): pure-Rust direct OS overlay bridge (`os_bridge.rs`: `OsTextBridge`, `PlatformOsBridge`, `MockOsTextBridge`), `overlay.status`/`capture`/`apply` (42 commands), anchored `--overlay` UI, and Draft Release `v0.1.0` created |
-| 2026-11-28 | M6-5 | Added global hotkey listener (`hotkey.rs` + `grammarcraft-cli hotkey-overlay`), deep EN/PT-BR/ES grammar (`grammar_deep.rs`), nominalizations/monotonous rhythm (`clarity.rs`/`scoring.rs`), `RtenTextModelRunner` (`rten` `0.28.0` ONNX), and `clean-room/` derivation/freeze/verification records (`cargo xtask ci` green) |
+| 2026-11-28 | M6-5 | PR #18 merged (`54b1f40`): global hotkey listener (`hotkey.rs` + `grammarcraft-cli hotkey-overlay`), deep EN/PT-BR/ES grammar (`grammar_deep.rs`), nominalizations/monotonous rhythm (`clarity.rs`/`scoring.rs`), `RtenTextModelRunner` (`rten` `0.28.0` ONNX), and `clean-room/` derivation/freeze/verification records |
+| 2026-11-28 | M6-6 | Added CLI `--format text\|json\|sarif` (SARIF 2.1.0 in `output.rs`), `craft-text` (`segment`) UAX #14/#29 segmentation (`segmentation.rs`), `craft::ui::pickers::Select` migration (`apps/grammarcraft`), and `packaging/macos/` (`cargo xtask ci` green) |

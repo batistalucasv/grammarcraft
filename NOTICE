@@ -7,7 +7,7 @@ Licensed under the MIT License or the Apache License, Version 2.0, at your optio
 Third-party and shared ArtCraft material
 
 This repository links:
-- `craft-proof`, `craft-atomic`, `craft-docx`, `craft-wordmodel`, and `craft` (`ui`, `ui-app`,
+- `craft-proof`, `craft-text` (`segment`), `craft-atomic`, `craft-docx`, `craft-wordmodel`, and `craft` (`ui`, `ui-app`,
   `theme-store`, `dialogs`, `automation`, and dev `ui-testing`) from `storytold/craft-libs` at
   revision `8be80b006888ae023d61eed265241c9b78b84981` (MIT OR Apache-2.0);
 - `craft-ai-core`, `craft-ai-openai`, `craft-ai-client` (transitively exposing `craft-ai-engine`
