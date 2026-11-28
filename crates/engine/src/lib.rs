@@ -138,8 +138,38 @@ impl Session {
         self.ai.mode
     }
 
+    pub fn set_ai_locality_mode(&mut self, mode: grammarcraft_core::AiLocalityMode) {
+        self.ai.mode = mode;
+    }
+
     pub fn ai_consent_status(&self) -> Result<grammarcraft_core::AiConsentStatus, CmdError> {
         self.ai.consent_status(self.doc.len_bytes())
+    }
+
+    pub fn configure_ai_storage(
+        &mut self,
+        consent_path: Option<std::path::PathBuf>,
+        history_path: Option<std::path::PathBuf>,
+        secret_store: std::sync::Arc<dyn craft_ai_native::secrets::SecretStore>,
+    ) {
+        self.ai
+            .configure_storage(consent_path, history_path, secret_store);
+    }
+
+    pub fn enable_desktop_ai_storage(&mut self) {
+        self.ai.enable_desktop_storage();
+    }
+
+    pub fn store_ai_secret(&self, key_ref: &str, value: &str) -> Result<(), CmdError> {
+        self.ai.store_secret(key_ref, value)
+    }
+
+    pub fn has_ai_secret(&self, key_ref: &str) -> Result<bool, CmdError> {
+        self.ai.has_secret(key_ref)
+    }
+
+    pub fn ai_history_entries(&self) -> Result<Vec<craft_ai_core::HistoryEntry>, CmdError> {
+        self.ai.history_entries()
     }
 
     pub fn set_cloud_provider(

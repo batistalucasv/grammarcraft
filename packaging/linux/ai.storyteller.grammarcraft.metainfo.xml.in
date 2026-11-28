@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>ai.storyteller.grammarcraft</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <name>GrammarCraft</name>
+  <summary>Clean-room, privacy-first writing assistant and grammar checker</summary>
+  <developer id="ai.storyteller">
+    <name>ArtCraft Team</name>
+  </developer>
+  <description>
+    <p>
+      GrammarCraft is an open-source, pure-Rust writing assistant that checks spelling, grammar,
+      contextual paronyms, regional variants, clarity, style, readability, tone, local similarity,
+      and bibliographic citations.
+    </p>
+    <ul>
+      <li>Deterministic, offline-first proofing across EN, PT-BR, and ES</li>
+      <li>Consent-gated hybrid AI rewriting with word-level diff preview and atomic undo</li>
+      <li>12 academic citation styles with clean-room BibTeX parsing and local similarity checks</li>
+      <li>Scriptable CLI, stdio MCP server, and loopback `--control` automation channel</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">ai.storyteller.grammarcraft.desktop</launchable>
+  <icon type="stock">ai.storyteller.grammarcraft</icon>
+  <url type="homepage">https://getartcraft.com</url>
+  <categories>
+    <category>Office</category>
+    <category>WordProcessor</category>
+  </categories>
+  <requires>
+    <display_length compare="ge">760</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+  <provides>
+    <binary>grammarcraft</binary>
+    <binary>grammarcraft-cli</binary>
+    <mediatype>text/plain</mediatype>
+    <mediatype>text/markdown</mediatype>
+    <mediatype>application/vnd.openxmlformats-officedocument.wordprocessingml.document</mediatype>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="@VERSION@" date="@DATE@"/>
+  </releases>
+</component>

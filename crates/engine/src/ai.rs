@@ -1,11 +1,18 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use craft_ai_client::AiClient;
+use craft_ai_core::history::{
+    EndRecord, HISTORY_SCHEMA, HistoryEntry, Outcome, StartRecord, merge,
+};
 use craft_ai_core::payload::PayloadKind;
 use craft_ai_core::{
     AppId, Auth, Billing, CapabilityId, Connection, ConnectionId, ConsentLedger, Disclosure, Event,
-    InputRole, JobState, Locality, ModelId, Payload, Provider, Request, SecretString,
+    HistoryRecord, InputRole, JobState, Locality, ModelId, Payload, Provider, Request, SecretRef,
+    SecretString,
 };
+use craft_ai_native::secrets::{MemoryStore, SecretStore, standard_store};
+use craft_ai_native::{ConsentFile, HistoryFile};
 use craft_ai_openai::{OpenAiConfig, OpenAiProvider};
 use grammarcraft_core::{AiConsentStatus, AiLocalityMode, AiMode, AiProposal, compute_word_diff};
 
@@ -138,8 +145,7 @@ impl AiBackend for CraftProviderBackend {
     }
 }
 
-/// Per-session AI locality, Craft [`ConsentLedger`], optional cloud backend, and staged proposal.
-#[derive(Debug)]
+/// Per-session AI locality, Craft [`ConsentLedger`], optional persistent files/secrets, and staged proposal.
 pub struct AiSessionState {
     pub mode: AiLocalityMode,
     pub endpoint: String,
@@ -147,6 +153,22 @@ pub struct AiSessionState {
     pub pending_proposal: Option<AiProposal>,
     next_proposal_id: u64,
     cloud_backend: Option<Arc<dyn AiBackend>>,
+    consent_file: Option<ConsentFile>,
+    history_file: Option<HistoryFile>,
+    secret_store: Arc<dyn SecretStore>,
+}
+
+impl std::fmt::Debug for AiSessionState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AiSessionState")
+            .field("mode", &self.mode)
+            .field("endpoint", &self.endpoint)
+            .field("has_pending_proposal", &self.pending_proposal.is_some())
+            .field("has_consent_file", &self.consent_file.is_some())
+            .field("has_history_file", &self.history_file.is_some())
+            .field("secret_store", &self.secret_store.name())
+            .finish()
+    }
 }
 
 impl Default for AiSessionState {
@@ -158,11 +180,68 @@ impl Default for AiSessionState {
             pending_proposal: None,
             next_proposal_id: 1,
             cloud_backend: None,
+            consent_file: None,
+            history_file: None,
+            secret_store: Arc::new(MemoryStore::default()),
         }
     }
 }
 
 impl AiSessionState {
+    pub fn configure_storage(
+        &mut self,
+        consent_path: Option<PathBuf>,
+        history_path: Option<PathBuf>,
+        secret_store: Arc<dyn SecretStore>,
+    ) {
+        self.consent_file = consent_path.map(ConsentFile::new);
+        if let Some(file) = &self.consent_file {
+            // Fail closed on missing or damaged consent files.
+            self.consent_ledger = file.load_or_empty();
+        }
+        self.history_file = history_path.map(HistoryFile::new);
+        self.secret_store = secret_store;
+    }
+
+    pub fn enable_desktop_storage(&mut self) {
+        if let Ok(app_id) = AppId::new("grammarcraft") {
+            self.consent_file = ConsentFile::at_default_location(&app_id);
+            if let Some(file) = &self.consent_file {
+                self.consent_ledger = file.load_or_empty();
+            }
+        }
+        self.history_file = HistoryFile::at_default_location();
+        self.secret_store = Arc::new(standard_store(None));
+    }
+
+    pub fn store_secret(&self, key_ref: &str, value: &str) -> Result<(), CmdError> {
+        let secret_ref = SecretRef::new(key_ref)
+            .map_err(|e| CmdError::Params(format!("invalid secret ref `{key_ref}`: {e}")))?;
+        let secret = SecretString::new(value);
+        self.secret_store
+            .set(&secret_ref, &secret)
+            .map_err(|e| CmdError::Failed(format!("failed to store secret: {e}")))
+    }
+
+    pub fn has_secret(&self, key_ref: &str) -> Result<bool, CmdError> {
+        let secret_ref = SecretRef::new(key_ref)
+            .map_err(|e| CmdError::Params(format!("invalid secret ref `{key_ref}`: {e}")))?;
+        self.secret_store
+            .get(&secret_ref)
+            .map(|opt| opt.is_some_and(|s| !s.is_empty()))
+            .map_err(|e| CmdError::Failed(format!("failed to read secret: {e}")))
+    }
+
+    pub fn history_entries(&self) -> Result<Vec<HistoryEntry>, CmdError> {
+        let Some(file) = &self.history_file else {
+            return Ok(Vec::new());
+        };
+        let read = file
+            .read()
+            .map_err(|e| CmdError::Failed(format!("failed to read AI history: {e}")))?;
+        Ok(merge(read.records, read.skipped).entries)
+    }
+
     pub fn set_cloud_backend(&mut self, backend: Option<Arc<dyn AiBackend>>) {
         self.cloud_backend = backend;
     }
@@ -237,6 +316,10 @@ impl AiSessionState {
             self.consent_ledger
                 .revoke(&disclosure.app, &disclosure.connection);
         }
+        if let Some(file) = &self.consent_file {
+            file.save(&self.consent_ledger)
+                .map_err(|e| CmdError::Failed(format!("failed to persist AI consent: {e}")))?;
+        }
         self.consent_status(0)
     }
 
@@ -284,17 +367,68 @@ impl AiSessionState {
                 .unwrap_or_else(|| DEFAULT_CLOUD_MODEL.to_owned()),
         };
         let hunks = compute_word_diff(original, &proposed)?;
+        let proposal_id = self.next_proposal_id;
         let proposal = AiProposal {
-            id: self.next_proposal_id,
+            id: proposal_id,
             mode: ai_mode,
-            provider_label,
+            provider_label: provider_label.clone(),
             original: original.to_owned(),
             proposed,
             hunks,
         };
+        self.record_history(proposal_id, ai_mode, &provider_label, original.len());
         self.next_proposal_id = self.next_proposal_id.saturating_add(1);
         self.pending_proposal = Some(proposal.clone());
         Ok(proposal)
+    }
+
+    fn record_history(
+        &self,
+        proposal_id: u64,
+        ai_mode: AiMode,
+        provider_label: &str,
+        payload_bytes: usize,
+    ) {
+        let Some(file) = &self.history_file else {
+            return;
+        };
+        let run = format!("gc-run-{proposal_id}-{}", now_ms());
+        let locality = match self.mode {
+            AiLocalityMode::LocalOffline => Locality::Local,
+            AiLocalityMode::CloudConsentRequired => Locality::Remote,
+        };
+        let destination = match self.mode {
+            AiLocalityMode::LocalOffline => "local://offline".to_owned(),
+            AiLocalityMode::CloudConsentRequired => self.endpoint.clone(),
+        };
+        let start = HistoryRecord::Start(StartRecord {
+            v: HISTORY_SCHEMA,
+            run: run.clone(),
+            at_ms: now_ms(),
+            app: "grammarcraft".to_owned(),
+            role_id: ai_mode.as_str().to_owned(),
+            role_label: ai_mode.label().to_owned(),
+            capability: "text.complete".to_owned(),
+            connection: provider_label.to_owned(),
+            connection_label: provider_label.to_owned(),
+            model: provider_label.to_owned(),
+            locality,
+            destination,
+            sent: Vec::new(),
+            params: vec![format!("bytes={payload_bytes}")],
+            provider_job: None,
+            estimate: None,
+            prompt: None,
+        });
+        let end = HistoryRecord::End(EndRecord {
+            v: HISTORY_SCHEMA,
+            run,
+            at_ms: now_ms(),
+            outcome: Outcome::Done,
+            usage: None,
+        });
+        let _ = file.append(&start);
+        let _ = file.append(&end);
     }
 }
 
@@ -302,6 +436,12 @@ fn now_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
 }
 
 fn system_instruction(mode: AiMode, detail: &str) -> String {

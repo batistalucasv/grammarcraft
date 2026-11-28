@@ -8,10 +8,11 @@ Third-party and shared ArtCraft material
 
 This repository links:
 - `craft-proof`, `craft-atomic`, `craft-docx`, `craft-wordmodel`, and `craft` (`ui`, `ui-app`,
-  `theme-store`, `dialogs`, and dev `ui-testing`) from `storytold/craft-libs` at revision
-  `8be80b006888ae023d61eed265241c9b78b84981` (MIT OR Apache-2.0);
-- `craft-ai-core`, `craft-ai-openai`, and `craft-ai-client` from `storytold/craft-ai-integrations`
-  at revision `a822ad5b4db2c0dcd7a43bb62d6d75251fd3f8b5` (MIT OR Apache-2.0);
+  `theme-store`, `dialogs`, `automation`, and dev `ui-testing`) from `storytold/craft-libs` at
+  revision `8be80b006888ae023d61eed265241c9b78b84981` (MIT OR Apache-2.0);
+- `craft-ai-core`, `craft-ai-openai`, `craft-ai-client`, and `craft-ai-native` from
+  `storytold/craft-ai-integrations` at revision `a822ad5b4db2c0dcd7a43bb62d6d75251fd3f8b5`
+  (MIT OR Apache-2.0);
 - Craft's `storytold/egui` fork (`932a73b28560acb1a695533307b2cd0d66a42081`, MIT OR Apache-2.0) and
   `storytold/winit` fork (`a517b3846ee8457d84ee4975110bfda6797c44dc`, Apache-2.0).
 
