@@ -51,6 +51,29 @@ pub fn run_desktop() -> eframe::Result {
     run_desktop_with(control::LaunchArgs::default())
 }
 
+pub fn apply_launch_args(
+    app: &mut GrammarCraftApp,
+    ctx: &egui::Context,
+    launch: &control::LaunchArgs,
+) {
+    if launch.quick_review {
+        ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
+            egui::WindowLevel::AlwaysOnTop,
+        ));
+    }
+    if let Some(text) = &launch.initial_text {
+        app.editor_text = text.clone();
+        app.set_text_and_check();
+    } else if launch.from_clipboard {
+        app.paste_clipboard_and_review(ctx);
+    } else if let Some(first_file) = launch.files.first()
+        && app.run_and_report("doc.open", json!({ "path": first_file }))
+    {
+        app.current_path = Some(first_file.clone());
+        app.sync_editor_from_session();
+    }
+}
+
 pub fn run_desktop_with(launch: control::LaunchArgs) -> eframe::Result {
     let spec = if launch.quick_review {
         quick_review_app_spec()
@@ -60,22 +83,7 @@ pub fn run_desktop_with(launch: control::LaunchArgs) -> eframe::Result {
     run(spec, move |ctx| {
         let mut app = GrammarCraftApp::new().with_quick_review(launch.quick_review);
         app.session.enable_desktop_ai_storage();
-        if launch.quick_review {
-            ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
-                egui::WindowLevel::AlwaysOnTop,
-            ));
-        }
-        if let Some(text) = &launch.initial_text {
-            app.editor_text = text.clone();
-            app.set_text_and_check();
-        } else if launch.from_clipboard {
-            app.paste_clipboard_and_review(ctx);
-        } else if let Some(first_file) = launch.files.first()
-            && app.run_and_report("doc.open", json!({ "path": first_file }))
-        {
-            app.current_path = Some(first_file.clone());
-            app.sync_editor_from_session();
-        }
+        apply_launch_args(&mut app, ctx, &launch);
         if let Some(port) = launch.control.port {
             let host = WindowHost::of(ctx);
             match control::ControlServer::start(&launch.control, port, host) {

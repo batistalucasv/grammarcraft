@@ -291,6 +291,23 @@ impl GrammarCraftApp {
         }
     }
 
+    pub fn apply_all_and_copy(&mut self, ctx: &egui::Context) {
+        self.apply_all_suggestions();
+        let failed = self
+            .status_notice
+            .as_ref()
+            .is_some_and(|(_, is_error)| *is_error);
+        if !failed && !self.session.doc().is_empty() {
+            let apply_notice = self
+                .status_notice
+                .as_ref()
+                .map(|(msg, _)| msg.clone())
+                .unwrap_or_else(|| "Applied fixes".to_owned());
+            self.copy_text_to_clipboard(ctx);
+            self.status_notice = Some((format!("{apply_notice} and copied text"), false));
+        }
+    }
+
     pub fn copy_text_to_clipboard(&mut self, ctx: &egui::Context) {
         let text = self.session.doc().text().to_owned();
         if text.is_empty() {
@@ -753,12 +770,25 @@ impl GrammarCraftApp {
     }
 
     fn handle_escape_key(&mut self, ctx: &egui::Context) {
-        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            if self.path_bar_mode.is_some() {
-                self.path_bar_mode = None;
-            } else if ctx.memory(|m| m.focused().is_some()) {
-                ctx.memory_mut(|m| m.surrender_focus(egui::Id::NULL));
-            }
+        let pressed = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+        if !pressed {
+            return;
+        }
+        if let Some(focused) = ctx.memory(|m| m.focused()) {
+            ctx.memory_mut(|m| m.surrender_focus(focused));
+        }
+        if self.path_bar_mode.is_some() {
+            self.path_bar_mode = None;
+        } else if self.quick_review {
+            ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+            self.selected_issue_id = None;
+            self.highlight_span = None;
+            self.quick_review = false;
+            self.status_notice = Some(("Closed Quick Review".to_owned(), false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
+                egui::WindowLevel::Normal,
+            ));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }
 

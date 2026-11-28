@@ -40,6 +40,15 @@ pub fn parse_launch_args(raw: &[String]) -> Result<LaunchArgs, (i32, String)> {
             other if other.starts_with("--text=") => {
                 parsed.initial_text = Some(other.trim_start_matches("--text=").to_owned());
             }
+            "--file" => {
+                let val = next_arg(raw, &mut i, "--file")?;
+                parsed.files.push(val.to_owned());
+            }
+            other if other.starts_with("--file=") => {
+                parsed
+                    .files
+                    .push(other.trim_start_matches("--file=").to_owned());
+            }
             "--control" => {
                 let val = next_arg(raw, &mut i, "--control")?;
                 let port = control_port(val).map_err(|_| {

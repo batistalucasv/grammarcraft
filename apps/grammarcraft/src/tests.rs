@@ -372,6 +372,7 @@ fn quick_review_mode_parses_flags_renders_cards_and_applies_all_via_session_run(
         .build_eframe(move |_| app);
     h.run_steps(4);
 
+    assert!(h.query_by_label("Apply All & Copy").is_some());
     assert!(h.query_by_label("Apply All").is_some());
     assert!(h.query_by_label("Paste & Review").is_some());
     assert!(h.query_by_label("Copy Text").is_some());
@@ -389,4 +390,71 @@ fn quick_review_mode_parses_flags_renders_cards_and_applies_all_via_session_run(
     h.get_by_label("Undo").click();
     h.run_steps(3);
     assert_eq!(h.state().session.doc().text(), original);
+}
+
+#[test]
+fn quick_review_apply_all_and_copy_file_arg_and_escape_without_focus_trap() {
+    use crate::apply_launch_args;
+    use crate::control::parse_launch_args;
+
+    let dir = std::env::temp_dir().join(format!("gc-ui-qr-file-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let file_path = dir.join("draft.txt");
+    let initial = "Teh quick draft recieve updates.";
+    std::fs::write(&file_path, initial).expect("write draft file");
+
+    let launch = parse_launch_args(&[
+        "--quick-review".into(),
+        "--file".into(),
+        file_path.to_string_lossy().into_owned(),
+    ])
+    .expect("parse --quick-review --file");
+    assert!(launch.quick_review);
+    assert_eq!(launch.files, vec![file_path.to_string_lossy().into_owned()]);
+
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(460.0, 540.0))
+        .with_context_setup(|ctx| {
+            craft::ui::shell::embed::install(ctx, headless_install_spec(), &ui_fonts())
+                .expect("craft runtime installs on test context");
+        })
+        .build_eframe(move |cc| {
+            let mut app = GrammarCraftApp::new().with_quick_review(launch.quick_review);
+            apply_launch_args(&mut app, &cc.egui_ctx, &launch);
+            app
+        });
+    h.run_steps(4);
+    let _ = std::fs::remove_dir_all(&dir);
+
+    assert_eq!(h.state().session.doc().text(), initial);
+    assert_eq!(h.state().editor_text, initial);
+    assert!(h.state().quick_review);
+
+    h.get_by_label("Apply All & Copy").click();
+    h.run_steps(4);
+
+    let corrected = h.state().session.doc().text().to_owned();
+    assert!(!corrected.contains("Teh"), "{corrected}");
+    assert!(!corrected.contains("recieve"), "{corrected}");
+    assert!(
+        h.state()
+            .status_notice
+            .as_ref()
+            .is_some_and(|(msg, is_err)| !is_err && msg.contains("copied text")),
+        "expected apply+copy notice, got {:?}",
+        h.state().status_notice
+    );
+
+    // Focus the multiline editor and ensure Escape exits quick review cleanly without a focus trap.
+    h.get_by_role_and_label(Role::MultilineTextInput, "Document Editor")
+        .click();
+    h.step();
+    assert!(h.ctx.memory(|m| m.focused().is_some()));
+
+    h.key_press(egui::Key::Escape);
+    h.run_steps(3);
+
+    assert!(!h.state().quick_review);
+    assert!(h.ctx.memory(|m| m.focused().is_none()));
 }

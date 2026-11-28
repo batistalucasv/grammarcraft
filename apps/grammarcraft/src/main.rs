@@ -23,6 +23,7 @@ USAGE:
 
 OPTIONS:
   --quick-review                     launch compact floating Quick Review popover (460x540, always-on-top)
+  --file <PATH>                      open a document path (.txt/.md/.docx/.grammarcraft.json) on startup
   --text <TEXT>                      pre-fill the editor text and run an immediate check
   --from-clipboard                   load initial text from the clipboard for immediate review
   --control <PORT|auto>              bind a loopback JSON-lines control socket (default: off)
