@@ -180,6 +180,28 @@ impl Session {
         self.ai.set_cloud_provider(model, provider)
     }
 
+    pub fn register_local_runner(
+        &mut self,
+        runner: std::sync::Arc<dyn craft_ai_client::ModelRunner>,
+        weights_path: std::path::PathBuf,
+        expected_sha256: Option<String>,
+    ) -> Result<(), CmdError> {
+        self.ai
+            .register_local_runner(runner, weights_path, expected_sha256)
+    }
+
+    pub fn local_engines(&self) -> Vec<String> {
+        self.ai.local_engines()
+    }
+
+    pub fn loaded_local_model_info(&self) -> Option<craft_ai_client::LoadedModelInfo> {
+        self.ai.loaded_local_model_info()
+    }
+
+    pub fn unload_local_model(&mut self) -> craft_ai_client::Unloaded {
+        self.ai.unload_local_model()
+    }
+
     pub fn last_similarity(&self) -> Option<&SimilarityReport> {
         self.last_similarity.as_ref()
     }

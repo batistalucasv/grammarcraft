@@ -1,7 +1,8 @@
 use craft::theme::Variant;
 use craft::theme::variant::{Emphasis, Tone};
-use craft::ui::contract::{Props as _, Show as _};
-use craft::ui::display::Badge;
+use craft::ui::contract::{Bind, Props as _, Show as _};
+use craft::ui::display::{Badge, Divider};
+use craft::ui::text::TextField;
 
 use crate::state::{FileAction, GrammarCraftApp, PaneFocusTarget, craft_button, primary_button};
 
@@ -34,7 +35,7 @@ pub fn show(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
             }
         }
 
-        ui.separator();
+        Divider::vertical().show(ui);
 
         if craft_button(ui, "Undo", app.session.can_undo()).clicked() {
             app.undo();
@@ -43,7 +44,7 @@ pub fn show(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
             app.redo();
         }
 
-        ui.separator();
+        Divider::vertical().show(ui);
         show_language_selector(app, ui);
 
         let theme_label = format!("Theme: {}", app.theme_mode.label());
@@ -51,7 +52,7 @@ pub fn show(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
             app.toggle_theme();
         }
 
-        ui.separator();
+        Divider::vertical().show(ui);
         show_score_badge(app, ui);
     });
 
@@ -117,14 +118,9 @@ fn show_path_bar(app: &mut GrammarCraftApp, ui: &mut egui::Ui) {
             FileAction::Save => "Save path (.txt, .md, .docx, .grammarcraft.json):",
         };
         ui.label(action_label);
-        let path_resp = ui.add(
-            egui::TextEdit::singleline(&mut app.path_input)
-                .desired_width(280.0)
-                .hint_text("document.docx"),
-        );
-        ui.ctx().accesskit_node_builder(path_resp.id, |node| {
-            node.set_label("Document Path");
-        });
+        TextField::new("Document Path", Bind::bound(&mut app.path_input))
+            .placeholder("document.docx")
+            .show(ui);
 
         let confirm_label = match mode {
             FileAction::Open => "Confirm Open",

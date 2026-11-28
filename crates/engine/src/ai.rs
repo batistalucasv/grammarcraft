@@ -1,7 +1,12 @@
-use std::path::PathBuf;
+use std::fmt::Write as _;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
-use craft_ai_client::AiClient;
+use craft_ai_client::{
+    AiClient, EngineRegistry, LoadedModel, LoadedModelInfo, ModelRunner, RunContext, Unloaded,
+};
 use craft_ai_core::history::{
     EndRecord, HISTORY_SCHEMA, HistoryEntry, Outcome, StartRecord, merge,
 };
@@ -15,11 +20,11 @@ use craft_ai_native::secrets::{MemoryStore, SecretStore, standard_store};
 use craft_ai_native::{ConsentFile, HistoryFile};
 use craft_ai_openai::{OpenAiConfig, OpenAiProvider};
 use grammarcraft_core::{AiConsentStatus, AiLocalityMode, AiMode, AiProposal, compute_word_diff};
+use sha2::{Digest, Sha256};
 
 use crate::CmdError;
 
 const DEFAULT_CLOUD_ENDPOINT: &str = "https://api.openai.com/v1";
-const DEFAULT_CLOUD_MODEL: &str = "gpt-4o-mini";
 const MAX_SIMULATION_POLLS: usize = 256;
 
 /// Backend abstraction for generating proposed text transformations.
@@ -145,7 +150,25 @@ impl AiBackend for CraftProviderBackend {
     }
 }
 
-/// Per-session AI locality, Craft [`ConsentLedger`], optional persistent files/secrets, and staged proposal.
+struct LocalRunnerRegistration {
+    runner: Arc<dyn ModelRunner>,
+    engine: String,
+    model_id: ModelId,
+    model_label: String,
+    weights_path: PathBuf,
+    expected_sha256: Option<String>,
+    loaded: Option<Box<dyn LoadedModel>>,
+    last_used: Option<Instant>,
+}
+
+struct HistoryMeta<'a> {
+    provider_label: &'a str,
+    locality: Locality,
+    destination: &'a str,
+    payload_bytes: usize,
+}
+
+/// Per-session AI locality, Craft [`ConsentLedger`], optional local [`ModelRunner`] / persistent files, and staged proposal.
 pub struct AiSessionState {
     pub mode: AiLocalityMode,
     pub endpoint: String,
@@ -153,6 +176,8 @@ pub struct AiSessionState {
     pub pending_proposal: Option<AiProposal>,
     next_proposal_id: u64,
     cloud_backend: Option<Arc<dyn AiBackend>>,
+    local_registry: EngineRegistry,
+    local_runner: Option<LocalRunnerRegistration>,
     consent_file: Option<ConsentFile>,
     history_file: Option<HistoryFile>,
     secret_store: Arc<dyn SecretStore>,
@@ -164,6 +189,7 @@ impl std::fmt::Debug for AiSessionState {
             .field("mode", &self.mode)
             .field("endpoint", &self.endpoint)
             .field("has_pending_proposal", &self.pending_proposal.is_some())
+            .field("local_engines", &self.local_registry.engines())
             .field("has_consent_file", &self.consent_file.is_some())
             .field("has_history_file", &self.history_file.is_some())
             .field("secret_store", &self.secret_store.name())
@@ -180,6 +206,8 @@ impl Default for AiSessionState {
             pending_proposal: None,
             next_proposal_id: 1,
             cloud_backend: None,
+            local_registry: EngineRegistry::new(),
+            local_runner: None,
             consent_file: None,
             history_file: None,
             secret_store: Arc::new(MemoryStore::default()),
@@ -330,15 +358,173 @@ impl AiSessionState {
             .is_some()
     }
 
+    pub fn register_local_runner(
+        &mut self,
+        runner: Arc<dyn ModelRunner>,
+        weights_path: PathBuf,
+        expected_sha256: Option<String>,
+    ) -> Result<(), CmdError> {
+        let normalized_sha = expected_sha256
+            .map(|raw| normalize_sha256_hex(&raw))
+            .transpose()?;
+        let engine = runner.engine().trim().to_ascii_lowercase();
+        if engine.is_empty() {
+            return Err(CmdError::Params(
+                "local model runner engine name must not be empty".to_owned(),
+            ));
+        }
+        let model = runner.model();
+        let model_label = if model.label.trim().is_empty() {
+            model.id.as_str().to_owned()
+        } else {
+            model.label.clone()
+        };
+        self.local_registry.register_arc(Arc::clone(&runner));
+        self.local_runner = Some(LocalRunnerRegistration {
+            runner,
+            engine,
+            model_id: model.id,
+            model_label,
+            weights_path,
+            expected_sha256: normalized_sha,
+            loaded: None,
+            last_used: None,
+        });
+        Ok(())
+    }
+
+    pub fn local_engines(&self) -> Vec<String> {
+        self.local_registry.engines()
+    }
+
+    pub fn loaded_local_model_info(&self) -> Option<LoadedModelInfo> {
+        let reg = self.local_runner.as_ref()?;
+        let loaded = reg.loaded.as_ref()?;
+        let model_bytes = loaded.memory_bytes();
+        let estimated = model_bytes.is_none();
+        let bytes = model_bytes
+            .or_else(|| reg.runner.memory_needed(&reg.weights_path))
+            .unwrap_or(0);
+        let idle = reg.last_used.map_or(Duration::ZERO, |t| t.elapsed());
+        Some(LoadedModelInfo {
+            model: reg.model_id.clone(),
+            label: reg.model_label.clone(),
+            bytes,
+            estimated,
+            running: false,
+            idle,
+        })
+    }
+
+    pub fn unload_local_model(&mut self) -> Unloaded {
+        let Some(reg) = self.local_runner.as_mut() else {
+            return Unloaded::default();
+        };
+        if reg.loaded.take().is_some() {
+            Unloaded {
+                freed: vec![reg.model_id.clone()],
+                after_run: Vec::new(),
+            }
+        } else {
+            Unloaded::default()
+        }
+    }
+
+    fn run_local_runner(
+        &mut self,
+        ai_mode: AiMode,
+        original: &str,
+        detail: &str,
+    ) -> Result<(String, String, String), CmdError> {
+        let reg = self
+            .local_runner
+            .as_mut()
+            .ok_or_else(|| CmdError::Failed("no local model runner registered".to_owned()))?;
+        if reg.loaded.is_none() {
+            if let Some(expected) = &reg.expected_sha256 {
+                verify_weights_sha256(&reg.weights_path, expected)?;
+            }
+            let loaded = reg.runner.load(&reg.weights_path).map_err(|e| {
+                CmdError::Failed(format!(
+                    "failed to load local model `{}`: {e}",
+                    reg.model_id
+                ))
+            })?;
+            reg.loaded = Some(loaded);
+        }
+        let loaded = reg
+            .loaded
+            .as_mut()
+            .ok_or_else(|| CmdError::Failed("local model failed to initialize".to_owned()))?;
+        let req = build_text_request(ai_mode, original, detail)?;
+        let outputs = loaded
+            .run(&req, &RunContext::detached())
+            .map_err(|e| CmdError::Failed(format!("local AI execution failed: {e}")))?;
+        let text = outputs
+            .into_iter()
+            .find_map(|out| out.payload.as_text().map(ToOwned::to_owned))
+            .ok_or_else(|| {
+                CmdError::Failed("local AI runner returned no text output".to_owned())
+            })?;
+        reg.last_used = Some(Instant::now());
+        let label = format!("local-engine:{}/{}", reg.engine, reg.model_id);
+        let destination = format!("local-engine://{}/{}", reg.engine, reg.model_id);
+        Ok((text, label, destination))
+    }
+
     pub fn stage_proposal(
         &mut self,
         ai_mode: AiMode,
         original: &str,
         detail: &str,
     ) -> Result<AiProposal, CmdError> {
-        let proposed = match self.mode {
+        let (proposed, provider_label, locality, destination) = if self.local_runner.is_some() {
+            let (text, label, dest) = self.run_local_runner(ai_mode, original, detail)?;
+            (text, label, Locality::Local, dest)
+        } else {
+            self.stage_with_backend(ai_mode, original, detail)?
+        };
+
+        let hunks = compute_word_diff(original, &proposed)?;
+        let proposal_id = self.next_proposal_id;
+        let proposal = AiProposal {
+            id: proposal_id,
+            mode: ai_mode,
+            provider_label: provider_label.clone(),
+            original: original.to_owned(),
+            proposed,
+            hunks,
+        };
+        self.record_history(
+            proposal_id,
+            ai_mode,
+            HistoryMeta {
+                provider_label: &provider_label,
+                locality,
+                destination: &destination,
+                payload_bytes: original.len(),
+            },
+        );
+        self.next_proposal_id = self.next_proposal_id.saturating_add(1);
+        self.pending_proposal = Some(proposal.clone());
+        Ok(proposal)
+    }
+
+    fn stage_with_backend(
+        &self,
+        ai_mode: AiMode,
+        original: &str,
+        detail: &str,
+    ) -> Result<(String, String, Locality, String), CmdError> {
+        match self.mode {
             AiLocalityMode::LocalOffline => {
-                LocalOfflineBackend.generate(ai_mode, original, detail)?
+                let text = LocalOfflineBackend.generate(ai_mode, original, detail)?;
+                Ok((
+                    text,
+                    LocalOfflineBackend.label().to_owned(),
+                    Locality::Local,
+                    "local://offline".to_owned(),
+                ))
             }
             AiLocalityMode::CloudConsentRequired => {
                 let disclosure = self.disclosure_for(original.len().max(detail.len()))?;
@@ -354,53 +540,22 @@ impl AiSessionState {
                         disclosure.destination
                     ))
                 })?;
-                backend.generate(ai_mode, original, detail)?
+                let text = backend.generate(ai_mode, original, detail)?;
+                Ok((
+                    text,
+                    backend.label().to_owned(),
+                    Locality::Remote,
+                    self.endpoint.clone(),
+                ))
             }
-        };
-
-        let provider_label = match self.mode {
-            AiLocalityMode::LocalOffline => LocalOfflineBackend.label().to_owned(),
-            AiLocalityMode::CloudConsentRequired => self
-                .cloud_backend
-                .as_ref()
-                .map(|b| b.label().to_owned())
-                .unwrap_or_else(|| DEFAULT_CLOUD_MODEL.to_owned()),
-        };
-        let hunks = compute_word_diff(original, &proposed)?;
-        let proposal_id = self.next_proposal_id;
-        let proposal = AiProposal {
-            id: proposal_id,
-            mode: ai_mode,
-            provider_label: provider_label.clone(),
-            original: original.to_owned(),
-            proposed,
-            hunks,
-        };
-        self.record_history(proposal_id, ai_mode, &provider_label, original.len());
-        self.next_proposal_id = self.next_proposal_id.saturating_add(1);
-        self.pending_proposal = Some(proposal.clone());
-        Ok(proposal)
+        }
     }
 
-    fn record_history(
-        &self,
-        proposal_id: u64,
-        ai_mode: AiMode,
-        provider_label: &str,
-        payload_bytes: usize,
-    ) {
+    fn record_history(&self, proposal_id: u64, ai_mode: AiMode, meta: HistoryMeta<'_>) {
         let Some(file) = &self.history_file else {
             return;
         };
         let run = format!("gc-run-{proposal_id}-{}", now_ms());
-        let locality = match self.mode {
-            AiLocalityMode::LocalOffline => Locality::Local,
-            AiLocalityMode::CloudConsentRequired => Locality::Remote,
-        };
-        let destination = match self.mode {
-            AiLocalityMode::LocalOffline => "local://offline".to_owned(),
-            AiLocalityMode::CloudConsentRequired => self.endpoint.clone(),
-        };
         let start = HistoryRecord::Start(StartRecord {
             v: HISTORY_SCHEMA,
             run: run.clone(),
@@ -409,13 +564,13 @@ impl AiSessionState {
             role_id: ai_mode.as_str().to_owned(),
             role_label: ai_mode.label().to_owned(),
             capability: "text.complete".to_owned(),
-            connection: provider_label.to_owned(),
-            connection_label: provider_label.to_owned(),
-            model: provider_label.to_owned(),
-            locality,
-            destination,
+            connection: meta.provider_label.to_owned(),
+            connection_label: meta.provider_label.to_owned(),
+            model: meta.provider_label.to_owned(),
+            locality: meta.locality,
+            destination: meta.destination.to_owned(),
             sent: Vec::new(),
-            params: vec![format!("bytes={payload_bytes}")],
+            params: vec![format!("bytes={}", meta.payload_bytes)],
             provider_job: None,
             estimate: None,
             prompt: None,
@@ -442,6 +597,66 @@ fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+}
+
+fn build_text_request(ai_mode: AiMode, original: &str, detail: &str) -> Result<Request, CmdError> {
+    let capability = CapabilityId::parse("text.complete")
+        .map_err(|e| CmdError::Failed(format!("invalid capability id: {e}")))?;
+    let instruction = system_instruction(ai_mode, detail);
+    let user_prompt = if original.trim().is_empty() {
+        detail.to_owned()
+    } else {
+        format!("{instruction}\n\n{original}")
+    };
+    Ok(Request::new(capability)
+        .with_input(InputRole::System, Payload::text(instruction))
+        .with_input(InputRole::Prompt, Payload::text(user_prompt)))
+}
+
+fn normalize_sha256_hex(raw: &str) -> Result<String, CmdError> {
+    let trimmed = raw.trim();
+    if trimmed.len() != 64 || !trimmed.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(CmdError::Params(
+            "expected SHA-256 hex digest with 64 hexadecimal characters".to_owned(),
+        ));
+    }
+    Ok(trimmed.to_ascii_lowercase())
+}
+
+fn verify_weights_sha256(path: &Path, expected_hex: &str) -> Result<(), CmdError> {
+    let mut file = std::fs::File::open(path).map_err(|e| {
+        CmdError::Failed(format!(
+            "cannot open local model weights `{}`: {e}",
+            path.display()
+        ))
+    })?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 16 * 1024];
+    loop {
+        let n = file.read(&mut buf).map_err(|e| {
+            CmdError::Failed(format!(
+                "cannot read local model weights `{}`: {e}",
+                path.display()
+            ))
+        })?;
+        if n == 0 {
+            break;
+        }
+        if let Some(chunk) = buf.get(..n) {
+            hasher.update(chunk);
+        }
+    }
+    let digest = hasher.finalize();
+    let mut actual_hex = String::with_capacity(64);
+    for byte in digest {
+        let _ = write!(actual_hex, "{byte:02x}");
+    }
+    if actual_hex != expected_hex {
+        return Err(CmdError::Failed(format!(
+            "local model weights SHA-256 mismatch: expected {expected_hex}, got {actual_hex}"
+        )));
+    }
+    Ok(())
 }
 
 fn system_instruction(mode: AiMode, detail: &str) -> String {

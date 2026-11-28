@@ -659,6 +659,7 @@ fn ai_status(session: &mut Session, _params: &Value) -> CmdResult {
         "locality": session.ai.mode.as_str(),
         "endpoint": session.ai.endpoint,
         "consent": consent,
+        "local_engines": session.ai.local_engines(),
         "has_pending_proposal": proposal.is_some(),
         "pending_proposal": proposal,
     }))

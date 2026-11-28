@@ -156,7 +156,7 @@ pub fn to_color32(c: Rgba) -> Color32 {
 }
 
 pub fn with_alpha(c: Color32, alpha: u8) -> Color32 {
-    Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), alpha)
+    c.gamma_multiply(f32::from(alpha) / 255.0)
 }
 
 pub fn category_style(
