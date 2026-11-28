@@ -13,6 +13,17 @@ generator.
 | Asset | Author | Source | Licence | Notes |
 |---|---|---|---|---|
 | `assets/app-icon/grammarcraft.svg` | GrammarCraft contributors | Original work in this repository | MIT OR Apache-2.0 | Minimal geometric nib and check emblem. |
+| `assets/app-icon/grammarcraft.ico` | GrammarCraft contributors | Derived from `assets/app-icon/grammarcraft.svg` | MIT OR Apache-2.0 | Multi-resolution Windows app icon (16..256 px). |
+| `assets/app-icon/grammarcraft-padded-1024.png` | GrammarCraft contributors | Derived from `assets/app-icon/grammarcraft.svg` | MIT OR Apache-2.0 | Padded 1024x1024 master PNG icon. |
+| `assets/app-icon/hicolor/scalable/apps/ai.storyteller.grammarcraft.svg` | GrammarCraft contributors | Copy of `assets/app-icon/grammarcraft.svg` | MIT OR Apache-2.0 | Scalable Linux hicolor icon. |
+| `assets/app-icon/hicolor/16x16/apps/ai.storyteller.grammarcraft.png` | GrammarCraft contributors | Derived from `assets/app-icon/grammarcraft.svg` | MIT OR Apache-2.0 | 16x16 Linux hicolor PNG icon. |
+| `assets/app-icon/hicolor/24x24/apps/ai.storyteller.grammarcraft.png` | GrammarCraft contributors | Derived from `assets/app-icon/grammarcraft.svg` | MIT OR Apache-2.0 | 24x24 Linux hicolor PNG icon. |
+| `assets/app-icon/hicolor/32x32/apps/ai.storyteller.grammarcraft.png` | GrammarCraft contributors | Derived from `assets/app-icon/grammarcraft.svg` | MIT OR Apache-2.0 | 32x32 Linux hicolor PNG icon. |
+| `assets/app-icon/hicolor/48x48/apps/ai.storyteller.grammarcraft.png` | GrammarCraft contributors | Derived from `assets/app-icon/grammarcraft.svg` | MIT OR Apache-2.0 | 48x48 Linux hicolor PNG icon. |
+| `assets/app-icon/hicolor/64x64/apps/ai.storyteller.grammarcraft.png` | GrammarCraft contributors | Derived from `assets/app-icon/grammarcraft.svg` | MIT OR Apache-2.0 | 64x64 Linux hicolor PNG icon. |
+| `assets/app-icon/hicolor/128x128/apps/ai.storyteller.grammarcraft.png` | GrammarCraft contributors | Derived from `assets/app-icon/grammarcraft.svg` | MIT OR Apache-2.0 | 128x128 Linux hicolor PNG icon. |
+| `assets/app-icon/hicolor/256x256/apps/ai.storyteller.grammarcraft.png` | GrammarCraft contributors | Derived from `assets/app-icon/grammarcraft.svg` | MIT OR Apache-2.0 | 256x256 Linux hicolor PNG icon. |
+| `assets/app-icon/hicolor/512x512/apps/ai.storyteller.grammarcraft.png` | GrammarCraft contributors | Derived from `assets/app-icon/grammarcraft.svg` | MIT OR Apache-2.0 | 512x512 Linux hicolor PNG icon. |
 
 ## Assets bundled through dependencies
 
