@@ -4,6 +4,7 @@ use grammarcraft_core::{
 };
 
 use crate::RawFinding;
+use crate::scoring::has_uniform_sentence_rhythm;
 
 const REPETITION_WINDOW_WORDS: usize = 12;
 const LONG_SENTENCE_DEFAULT_WORDS: usize = 30;
@@ -25,6 +26,22 @@ const PT_REDUNDANCIES: &[(&str, &str)] = &[
     ("sair para fora", "sair"),
     ("elo de ligação", "elo"),
     ("há anos atrás", "há anos"),
+];
+
+const EN_NOMINALIZATIONS: &[(&str, &str)] = &[
+    ("make a decision", "decide"),
+    ("take into consideration", "consider"),
+    ("perform an analysis", "analyze"),
+    ("conduct an investigation", "investigate"),
+    ("give an explanation", "explain"),
+];
+
+const PT_NOMINALIZATIONS: &[(&str, &str)] = &[
+    ("fazer uma análise", "analisar"),
+    ("tomar uma decisão", "decidir"),
+    ("realizar uma verificação", "verificar"),
+    ("dar uma olhada", "verificar"),
+    ("fazer uma revisão", "revisar"),
 ];
 
 const EN_AUXILIARIES: &[&str] = &["is", "are", "was", "were", "be", "been", "being"];
@@ -78,8 +95,10 @@ pub(crate) fn check_paragraph(
     let is_pt = is_portuguese(lang);
     let mut out = Vec::new();
     check_redundancies(para_text, is_pt, &mut out);
+    check_nominalizations(para_text, is_pt, &mut out);
     check_passive_voice(para_text, is_pt, goals, &mut out);
     check_long_sentences(para_text, is_pt, goals, &mut out);
+    check_monotonous_rhythm(para_text, is_pt, goals, &mut out);
     check_repetition(para_text, is_pt, &mut out);
     out
 }
@@ -143,6 +162,126 @@ fn check_redundancies(para_text: &str, is_pt: bool, out: &mut Vec<RawFinding>) {
             }
             cursor = end;
         }
+    }
+}
+
+fn check_nominalizations(para_text: &str, is_pt: bool, out: &mut Vec<RawFinding>) {
+    let lower = para_text.to_lowercase();
+    if lower.len() != para_text.len() {
+        return;
+    }
+    let table = if is_pt {
+        PT_NOMINALIZATIONS
+    } else {
+        EN_NOMINALIZATIONS
+    };
+    for &(phrase, replacement) in table {
+        let mut cursor = 0usize;
+        while let Some(rel) = lower.get(cursor..).and_then(|s| s.find(phrase)) {
+            let start = cursor + rel;
+            let end = start + phrase.len();
+            if is_word_boundary(&lower, start, end)
+                && let Some(original) = para_text.get(start..end)
+            {
+                let suggested = match_initial_case(original, replacement);
+                let explanation = if is_pt {
+                    format!("Prefira o verbo direto `{suggested}` em vez da nominalização vaga.")
+                } else {
+                    format!("Prefer the direct verb `{suggested}` over a vague nominalization.")
+                };
+                out.push(RawFinding {
+                    rule_id: "clarity.nominalization",
+                    category: IssueCategory::ClarityAndConciseness,
+                    severity: Severity::Suggestion,
+                    confidence: Confidence::High,
+                    rel_start: start,
+                    rel_end: end,
+                    title: if is_pt {
+                        "Verbo direto".to_owned()
+                    } else {
+                        "Stronger verb".to_owned()
+                    },
+                    explanation,
+                    replacements: vec![Replacement::new(suggested)],
+                });
+            }
+            cursor = end;
+        }
+    }
+}
+
+fn check_monotonous_rhythm(
+    para_text: &str,
+    is_pt: bool,
+    goals: WritingGoals,
+    out: &mut Vec<RawFinding>,
+) {
+    let sentences = sentence_spans(para_text);
+    let min_run = if matches!(goals.context, Context::Technical | Context::Academic)
+        && goals.audience == Audience::Specialized
+    {
+        4
+    } else {
+        3
+    };
+    if sentences.len() < min_run {
+        return;
+    }
+
+    let first_words: Vec<String> = sentences
+        .iter()
+        .map(|(_, _, s)| {
+            word_spans(s)
+                .first()
+                .map(|(_, _, w)| w.to_lowercase())
+                .unwrap_or_default()
+        })
+        .collect();
+    let repeated_opener = first_words.windows(min_run).any(|win| {
+        let first = &win[0];
+        first.chars().count() >= 2 && win.iter().all(|w| w == first)
+    });
+
+    let word_counts: Vec<usize> = sentences
+        .iter()
+        .map(|(_, _, s)| word_spans(s).len())
+        .collect();
+    let uniform_length = has_uniform_sentence_rhythm(&word_counts, min_run);
+
+    if (repeated_opener || uniform_length)
+        && let (Some((first_start, _, _)), Some((_, last_end, _))) =
+            (sentences.first(), sentences.last())
+    {
+        let (title, explanation) = if is_pt {
+            (
+                "Ritmo sintático monótono",
+                if repeated_opener {
+                    "Três ou mais frases seguidas começam com a mesma palavra; varie as aberturas."
+                } else {
+                    "Sequência de frases com extensão muito uniforme; alterne frases curtas e médias."
+                },
+            )
+        } else {
+            (
+                "Monotonous sentence rhythm",
+                if repeated_opener {
+                    "Three or more consecutive sentences begin with the same word; vary sentence openings."
+                } else {
+                    "Consecutive sentences have nearly identical lengths; vary cadence for better flow."
+                },
+            )
+        };
+        out.push(RawFinding {
+            rule_id: "clarity.monotonous_rhythm",
+            category: IssueCategory::ClarityAndConciseness,
+            severity: Severity::Suggestion,
+            confidence: Confidence::Low,
+            rel_start: *first_start,
+            rel_end: *last_end,
+            title: title.to_owned(),
+            explanation: explanation.to_owned(),
+            replacements: Vec::new(),
+        });
     }
 }
 

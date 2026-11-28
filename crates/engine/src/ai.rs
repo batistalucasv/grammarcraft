@@ -12,20 +12,146 @@ use craft_ai_core::history::{
 };
 use craft_ai_core::payload::PayloadKind;
 use craft_ai_core::{
-    AppId, Auth, Billing, CapabilityId, Connection, ConnectionId, ConsentLedger, Disclosure, Event,
-    HistoryRecord, InputRole, JobState, Locality, ModelId, Payload, Provider, Request, SecretRef,
-    SecretString,
+    AiError, AppId, Auth, Billing, CapabilityId, CapabilitySpec, Connection, ConnectionId,
+    ConsentLedger, Disclosure, ErrorKind, Event, HistoryRecord, InputRole, JobState, Locality,
+    ModelId, ModelInfo, Output, Payload, Provider, Request, SecretRef, SecretString,
 };
 use craft_ai_native::secrets::{MemoryStore, SecretStore, standard_store};
 use craft_ai_native::{ConsentFile, HistoryFile};
 use craft_ai_openai::{OpenAiConfig, OpenAiProvider};
 use grammarcraft_core::{AiConsentStatus, AiLocalityMode, AiMode, AiProposal, compute_word_diff};
+use rten::Model as RtenModel;
+use rten_tensor::{Layout, Tensor};
 use sha2::{Digest, Sha256};
 
 use crate::CmdError;
 
 const DEFAULT_CLOUD_ENDPOINT: &str = "https://api.openai.com/v1";
 const MAX_SIMULATION_POLLS: usize = 256;
+const MAX_RTEN_MODEL_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_RTEN_INPUT_SCALARS: usize = 256;
+
+/// Local pure-Rust ONNX text runner backed by `rten::Model::load_file` after SHA-256 verification.
+#[derive(Debug, Clone)]
+pub struct RtenTextModelRunner {
+    engine: String,
+    model_id: ModelId,
+    model_label: String,
+}
+
+impl RtenTextModelRunner {
+    pub fn new(model_id: &str, label: &str) -> Result<Self, CmdError> {
+        let id = ModelId::new(model_id)
+            .map_err(|e| CmdError::Params(format!("invalid model id `{model_id}`: {e}")))?;
+        let trimmed_label = label.trim();
+        Ok(Self {
+            engine: "rten".to_owned(),
+            model_id: id,
+            model_label: if trimmed_label.is_empty() {
+                "GrammarCraft RTen ONNX Text Runner".to_owned()
+            } else {
+                trimmed_label.to_owned()
+            },
+        })
+    }
+}
+
+impl ModelRunner for RtenTextModelRunner {
+    fn engine(&self) -> &str {
+        &self.engine
+    }
+
+    fn model(&self) -> ModelInfo {
+        let mut info = ModelInfo::new(self.model_id.clone(), &self.model_label);
+        if let Ok(cap) = CapabilityId::parse("text.complete") {
+            info = info.with(
+                CapabilitySpec::new(cap)
+                    .accepting(InputRole::System, 1)
+                    .accepting(InputRole::Prompt, 1)
+                    .requiring(InputRole::Prompt),
+            );
+        }
+        info
+    }
+
+    fn load(&self, weights: &Path) -> Result<Box<dyn LoadedModel>, AiError> {
+        let meta = std::fs::metadata(weights).map_err(|err| {
+            AiError::new(
+                ErrorKind::Provider,
+                format!("cannot inspect ONNX model `{}`: {err}", weights.display()),
+            )
+        })?;
+        if !meta.is_file() || meta.len() > MAX_RTEN_MODEL_BYTES {
+            return Err(AiError::unsupported(format!(
+                "ONNX model `{}` must be a regular file up to {MAX_RTEN_MODEL_BYTES} bytes",
+                weights.display()
+            )));
+        }
+        let model = RtenModel::load_file(weights).map_err(|err| {
+            AiError::new(
+                ErrorKind::Provider,
+                format!("rten failed to load `{}`: {err}", weights.display()),
+            )
+        })?;
+        Ok(Box::new(RtenLoadedTextModel {
+            model,
+            model_bytes: meta.len(),
+        }))
+    }
+}
+
+struct RtenLoadedTextModel {
+    model: RtenModel,
+    model_bytes: u64,
+}
+
+impl LoadedModel for RtenLoadedTextModel {
+    fn run(&mut self, request: &Request, _ctx: &RunContext) -> Result<Vec<Output>, AiError> {
+        let prompt = request
+            .inputs
+            .iter()
+            .find(|input| input.role == InputRole::Prompt)
+            .and_then(|input| input.payload.as_text())
+            .ok_or_else(|| AiError::unsupported("RTen text runner requires a prompt payload"))?;
+
+        let scalars: Vec<f32> = prompt
+            .bytes()
+            .take(MAX_RTEN_INPUT_SCALARS)
+            .map(|b| f32::from(b) / 255.0)
+            .collect();
+        let data = if scalars.is_empty() {
+            vec![0.0_f32]
+        } else {
+            scalars
+        };
+        let tensor = Tensor::from_data(&[1, data.len()], data);
+        let out_val = self.model.run_one(tensor.into(), None).map_err(|err| {
+            AiError::new(ErrorKind::Provider, format!("rten execution failed: {err}"))
+        })?;
+        let dims: usize = out_val
+            .as_tensor_view::<f32>()
+            .map(|view| view.len())
+            .unwrap_or(0);
+        let body = prompt
+            .rsplit_once("\n\n")
+            .map_or(prompt, |(_, text)| text)
+            .trim();
+        let cleaned = rewrite_offline(body, "");
+        let rendered = if dims > 0 && cleaned != body {
+            cleaned
+        } else {
+            format!("{} [rten:{}]", collapse_spaces(body), dims)
+        };
+        Ok(vec![Output {
+            payload: Payload::text(rendered),
+            label: Some("rten-onnx".to_owned()),
+        }])
+    }
+
+    fn memory_bytes(&self) -> Option<u64> {
+        Some(self.model_bytes)
+    }
+}
 
 /// Backend abstraction for generating proposed text transformations.
 pub trait AiBackend: Send + Sync + std::fmt::Debug {

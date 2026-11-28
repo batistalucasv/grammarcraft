@@ -121,3 +121,15 @@ fn classify_level(flesch: f64) -> ReadabilityLevel {
         ReadabilityLevel::Academic
     }
 }
+
+/// Evaluates consecutive sentence lengths for monotonous cadence (`min_words..=max_words` within `<= 1`).
+pub(crate) fn has_uniform_sentence_rhythm(word_counts: &[usize], min_run: usize) -> bool {
+    if min_run == 0 || word_counts.len() < min_run {
+        return false;
+    }
+    word_counts.windows(min_run).any(|win| {
+        let min_len = win.iter().copied().min().unwrap_or(0);
+        let max_len = win.iter().copied().max().unwrap_or(0);
+        min_len >= 5 && max_len.saturating_sub(min_len) <= 1
+    })
+}

@@ -388,3 +388,30 @@ fn quick_review_supports_text_file_stdin_goals_and_apply_all() {
         String::from_utf8_lossy(&oversized_out.stderr)
     );
 }
+
+#[test]
+fn hotkey_overlay_validates_binding_and_triggers_overlay_with_mock_once() {
+    let bad = cli(&["hotkey-overlay", "--hotkey", "NoModifier", "--once"]);
+    assert_eq!(bad.status.code(), Some(2));
+
+    let triggered = cli(&[
+        "hotkey-overlay",
+        "--hotkey",
+        "ctrl+shift+g",
+        "--once",
+        "--mock-trigger",
+        "--mock-text",
+        "Teh draft.",
+    ]);
+    assert!(
+        triggered.status.success(),
+        "{}",
+        String::from_utf8_lossy(&triggered.stderr)
+    );
+    let parsed: serde_json::Value =
+        serde_json::from_slice(&triggered.stdout).expect("hotkey JSON output");
+    assert_eq!(parsed["triggered"], true);
+    assert_eq!(parsed["hotkey"], "Ctrl+Shift+G");
+    assert_eq!(parsed["action"], "overlay");
+    assert_eq!(parsed["overlay"]["text"], "Teh draft.");
+}

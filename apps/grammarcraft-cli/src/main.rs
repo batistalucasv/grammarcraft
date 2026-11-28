@@ -12,6 +12,7 @@
     clippy::unreachable
 )]
 
+mod hotkey_overlay;
 mod mcp;
 mod native_messaging;
 mod quick_review;
@@ -29,6 +30,7 @@ USAGE:
   grammarcraft-cli run <id> [json]                                         run a command with its parameters (default {})
   grammarcraft-cli check <file>                                            open and analyze a text/markdown/.docx/.grammarcraft.json file
   grammarcraft-cli quick-review (--text <TEXT> | --file <PATH> | --stdin) [--lang <TAG>] [--audience <AUDIENCE>] [--formality <FORMALITY>] [--apply-all]
+  grammarcraft-cli hotkey-overlay [--hotkey <BINDING>] [--once] [--mock-trigger] [--mock-text <TEXT>]
   grammarcraft-cli stats                                                   measure text stats in a fresh session
   grammarcraft-cli mcp --automation-read-root <dir> --automation-write-root <dir>
   grammarcraft-cli native-messaging                                        WebExtension Native Messaging stdio host (4-byte LE framing)
@@ -68,6 +70,7 @@ fn dispatch(args: Vec<String>) -> Result<ExitCode, String> {
         ),
         "check" => check_file(args.get(1).map(String::as_str)),
         "quick-review" => quick_review::run(&args[1..]),
+        "hotkey-overlay" => hotkey_overlay::run(&args[1..]),
         "stats" => run_command(Some("stats.measure"), None),
         "mcp" => mcp::run(&args[1..]),
         "native-messaging" => native_messaging::run(&args[1..]),
