@@ -5,8 +5,8 @@ use std::sync::OnceLock;
 
 use grammarcraft_core::{
     AiLocalityMode, AiMode, Audience, CitationStyle, Context, CoreError, Formality,
-    IgnoredIssueKey, Issue, IssueId, Purpose, StyleRule, StyleRuleKind, TextStats, WritingGoals,
-    format_bibliography, parse_bibtex_entries, validate_citations,
+    IgnoredIssueKey, Issue, IssueCategory, IssueId, Purpose, StyleRule, StyleRuleKind, TextStats,
+    WritingGoals, format_bibliography, parse_bibtex_entries, validate_citations,
 };
 use grammarcraft_rules::{AnalysisReport, check_local_similarity, validate_style_rule};
 use serde_json::{Value, json};
@@ -160,6 +160,9 @@ fn specs() -> Vec<CommandSpec> {
             .pure(),
         CommandSpec::new("review.apply", "Apply Suggestion", "Review › Proofing", review_apply)
             .params(r#"{"issue_id": number, "replacement_index"?: number, "text"?: string}"#),
+        CommandSpec::new("review.apply_all", "Apply All Top Suggestions", "Review › Proofing", review_apply_all)
+            .params(r#"{"category"?: string}"#)
+            .when(require_non_empty_doc),
         CommandSpec::new("review.dismiss", "Dismiss Issue", "Review › Proofing", review_dismiss)
             .params(r#"{"issue_id": number}"#),
         CommandSpec::new("dict.add", "Add to Dictionary", "Review › Dictionary", dict_add)
@@ -417,6 +420,67 @@ fn resolve_replacement(
                 issue.id
             ))
         })
+}
+
+fn review_apply_all(session: &mut Session, params: &Value) -> CmdResult {
+    p::require_object(params)?;
+    let category_filter = p::opt_str(params, "category")?
+        .map(|raw| {
+            IssueCategory::parse(raw)
+                .ok_or_else(|| CmdError::Params(format!("unknown issue category `{raw}`")))
+        })
+        .transpose()?;
+
+    let mut chosen: Vec<(Issue, String)> = {
+        let (report, _) = session.analyze(None)?;
+        let mut sorted: Vec<Issue> = report
+            .issues
+            .iter()
+            .filter(|issue| category_filter.is_none_or(|cat| issue.category == cat))
+            .filter(|issue| !issue.replacements.is_empty())
+            .cloned()
+            .collect();
+        sorted.sort_by_key(|issue| (issue.span.start(), issue.span.end()));
+
+        let mut non_overlapping = Vec::new();
+        let mut last_end = 0usize;
+        for issue in sorted {
+            if issue.span.start() < last_end {
+                continue;
+            }
+            if let Some(first) = issue.replacements.first() {
+                let replacement = first.text.clone();
+                last_end = issue.span.end();
+                non_overlapping.push((issue, replacement));
+            }
+        }
+        non_overlapping
+    };
+
+    if chosen.is_empty() {
+        return Ok(json!({
+            "applied_count": 0,
+            "applied_issue_ids": [],
+            "stats": stats_json(session.doc.stats()),
+        }));
+    }
+
+    let applied_ids: Vec<u64> = chosen.iter().map(|(issue, _)| issue.id.get()).collect();
+    chosen.reverse();
+    let mut candidate = session.doc.clone();
+    let mut stats = candidate.stats();
+    for (issue, replacement) in &chosen {
+        stats = candidate.replace_span(issue.span, replacement)?;
+    }
+
+    session.push_undo();
+    session.doc = candidate;
+    session.invalidate_report();
+    Ok(json!({
+        "applied_count": applied_ids.len(),
+        "applied_issue_ids": applied_ids,
+        "stats": stats_json(stats),
+    }))
 }
 
 fn review_dismiss(session: &mut Session, params: &Value) -> CmdResult {

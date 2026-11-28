@@ -46,6 +46,7 @@ fn the_registry_reports_every_command() {
         "stats.measure",
         "review.check",
         "review.apply",
+        "review.apply_all",
         "review.dismiss",
         "dict.add",
         "dict.remove",
@@ -885,4 +886,22 @@ fn local_model_runner_verifies_sha256_and_takes_precedence_over_fallback_and_clo
     );
 
     let _ = std::fs::remove_dir_all(&base);
+}
+
+#[test]
+fn review_apply_all_fixes_non_overlapping_issues_atomically_with_undo() {
+    let mut session = Session::new();
+    let original = "Teh cat recieve teh package.";
+    run(&mut session, "doc.set_text", json!({ "text": original })).expect("set text");
+
+    let res = run(&mut session, "review.apply_all", json!({})).expect("apply_all");
+    let count = res["applied_count"].as_u64().unwrap_or(0);
+    assert!(count >= 2, "expected multiple fixes, got {res}");
+    let updated = session.doc().text().to_owned();
+    assert!(!updated.contains("recieve"), "still had typo: {updated}");
+    assert!(!updated.contains("Teh"), "still had Teh: {updated}");
+
+    // Single atomic undo restores the full document before apply_all.
+    run(&mut session, "history.undo", json!({})).expect("single undo");
+    assert_eq!(session.doc().text(), original);
 }

@@ -49,6 +49,17 @@ impl IssueCategory {
             Self::StyleGuide => "style_guide",
         }
     }
+
+    pub fn parse(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "spelling_and_grammar" | "spelling" | "grammar" => Some(Self::SpellingAndGrammar),
+            "clarity_and_conciseness" | "clarity" => Some(Self::ClarityAndConciseness),
+            "style_and_vocabulary" | "style" => Some(Self::StyleAndVocabulary),
+            "tone_and_appropriateness" | "tone" => Some(Self::ToneAndAppropriateness),
+            "style_guide" | "guide" => Some(Self::StyleGuide),
+            _ => None,
+        }
+    }
 }
 
 /// Actionable severity of a reported issue.
